@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { EventBus } from '../../backend/infra/messaging/EventBus';
+import { EventBus } from '../../infra/messaging/EventBus';
 
 // Shell Controls: Auth, Layout, Global Events
 interface ShellContextType {

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Bypassa o mock global do setup.ts — usamos a implementação real do EventBus
-const { EventBus } = await vi.importActual<typeof import('../../backend/infra/messaging/EventBus')>(
-  '../../backend/infra/messaging/EventBus'
+const { EventBus } = await vi.importActual<typeof import('../../infra/messaging/EventBus')>(
+  '../../infra/messaging/EventBus'
 );
 
 describe('EventBus (MessageBroker)', () => {

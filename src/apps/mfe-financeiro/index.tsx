@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CreditCard, FileText, CheckCircle, TrendingDown, TrendingUp, AlertCircle, Banknote, FileCheck2, ArrowUpRight } from 'lucide-react';
-import { EventBus } from '../../backend/infra/messaging/EventBus';
+import { EventBus } from '../../infra/messaging/EventBus';
 
 export function FinanceiroMfe() {
   const [pagamentos, setPagamentos] = useState<any[]>([
