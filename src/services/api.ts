@@ -1,181 +1,240 @@
-let mockPos: any[] = [
-  { 
-    id: '1', 
-    nf_number: '12345', 
-    supplier_name: 'Fornecedor Premium SA', 
-    status: 'PENDING', 
-    created_at: new Date().toISOString(), 
-    ordered_at: new Date().toISOString(),
-    nf_value: 5000,
-    items: [
-      { sku_id: 'COL-ORTO-001', description: 'Colchão Ortopédico Casal', expected_quantity: 10, unit_cost: 450.0 }
-    ] 
-  }
-];
+import { http } from './http';
 
-let mockReceivings: any[] = [
-  { id: 'mock-rec-1', start_time: new Date().toISOString(), supplier_name: 'Fornecedor Mock', nf_number: '0001', license_plate: 'ABC-1234', vehicle_type: 'TRUCK', status: 'IN_PROGRESS', po_status: 'RECEIVING' }
-];
+/**
+ * Camada de API do frontend — agora conectada ao backend real (Fastify).
+ *
+ * Regra de ouro: cada função mantém a MESMA assinatura e o MESMO formato de
+ * retorno que as telas já consomem (ex.: `{ data: { dados: [...] } }`), para
+ * não exigir nenhuma mudança nos componentes nem na estilização.
+ *
+ * O backend responde sempre no formato { success, data, total?, page?, ... }.
+ * Aqui mapeamos os campos camelCase do backend para os nomes que cada tela lê.
+ *
+ * ⚠️ MOCK MANTIDO (não há endpoint no backend ainda): suppliers, skus,
+ *    scheduleApi, analyticsApi, aydaApi. Marcados com TODO.
+ */
 
+// Extrai a lista de itens de uma resposta paginada do backend.
+const lista = (resp: any): any[] => resp?.data?.data ?? resp?.data?.dados ?? [];
+
+// ───────────────────────────── COMPRAS ─────────────────────────────
 export const purchasesApi = {
   list: async (params?: any) => {
-    let list = mockPos;
-    if (params?.status) {
-      list = list.filter(p => p.status === params.status);
-    }
-    return { data: { dados: list } };
+    const resp = await http.get('/compras', { params });
+    const dados = lista(resp).map((p: any) => ({
+      id: p.id,
+      nf_number: p.numeroNf,
+      supplier_name: p.fornecedorNome,
+      supplier_id: p.fornecedorId,
+      status: p.status,
+      created_at: p.dataPedido,
+      ordered_at: p.dataPedido,
+      nf_value: p.valorNf ?? 0,
+      observacoes: p.observacoes,
+      items: p.itens ?? [],
+    }));
+    return { data: { dados } };
   },
-  suppliers: async () => ({ data: { dados: [{id: '1', nome_fantasia: 'Fornecedor Premium SA'}, {id: '2', nome_fantasia: 'Distribuidora ABC'}] } }),
-  skus: async () => ({ data: { dados: [{id: '1', codigo: 'COL-ORTO-001', descricao: 'Colchão Ortopédico Casal'}, {id: '2', codigo: 'TRV-MEM-002', descricao: 'Travesseiro Memory Foam'}] } }),
+
+  // TODO: backend ainda não expõe /fornecedores — mantido mock.
+  suppliers: async () => ({
+    data: { dados: [
+      { id: '1', nome_fantasia: 'Fornecedor Premium SA' },
+      { id: '2', nome_fantasia: 'Distribuidora ABC' },
+    ] },
+  }),
+
+  // TODO: backend ainda não expõe /skus — mantido mock.
+  skus: async () => ({
+    data: { dados: [
+      { id: '1', codigo: 'COL-ORTO-001', descricao: 'Colchão Ortopédico Casal' },
+      { id: '2', codigo: 'TRV-MEM-002', descricao: 'Travesseiro Memory Foam' },
+    ] },
+  }),
+
   create: async (data: any) => {
-    const newId = String(Date.now());
-    mockPos.push({
-      id: newId,
-      nf_number: data.nfNumber,
-      supplier_name: data.supplierName || 'Fornecedor Novo',
-      status: 'PENDING',
-      created_at: new Date().toISOString(),
-      ordered_at: data.expectedAt || new Date().toISOString(),
-      nf_value: data.nfValue,
-      items: data.items.map((i: any) => ({
-        sku_id: i.skuId,
-        description: i.description,
-        expected_quantity: i.expectedQuantity,
-        unit_cost: i.unitCost
-      }))
-    });
-    return { data: { message: 'Criado com sucesso' } };
-  },
-  cancel: async (id: string, reason: string) => {
-    const po = mockPos.find(p => p.id === id);
-    if (po) po.status = 'CANCELLED';
-    return { data: { message: 'Cancelado' } };
-  }
-};
-
-export const receivingApi = {
-  list: async () => ({ data: { dados: mockReceivings } }),
-  start: async (data: any) => {
-    const newId = String(Date.now());
-    mockReceivings.push({
-      id: newId,
-      purchase_order_id: data.purchaseOrderId,
-      supplier_name: data.supplierName,
-      nf_number: data.nfNumber,
-      license_plate: data.licensePlate,
-      vehicle_type: data.vehicleType,
-      driver_name: data.driverName,
-      dock: data.dock,
-      start_time: new Date().toISOString(),
-      status: 'IN_PROGRESS',
-      po_status: 'RECEIVING'
-    });
-    return { data: { message: 'Recebimento criado' } };
-  }
-};
-
-let mockConferences: any[] = [
-  { id: 'mock-conf-1', nf_number: '001', purchase_order_id: 'po1', supplier_name: 'Fornecedor Premium SA', total_pieces: 100, attempts: 0, status: 'PENDING' }
-];
-
-let mockPclDivergences: any[] = [
-  { id: 'mock-pcl-1', nf_number: '001', supplier_name: 'Fornecedor A', error_type: 'DIVERGENCIA_CONTAGEM', total_pieces: 100, checked_pieces: 95, damages: 0, attempts: 3, status: 'IN_ANALYSIS' }
-];
-
-export const conferenceApi = {
-  list: async () => ({ data: { dados: mockConferences } }),
-  start: async (data: any) => {
-    const newConf = {
-      id: String(Date.now()),
-      nf_number: data.nfNumber,
-      purchase_order_id: data.purchaseOrderId,
-      supplier_name: data.supplierName,
-      total_pieces: data.totalPieces,
-      vehicle_type: data.vehicleType,
-      license_plate: data.licensePlate,
-      attempts: 0,
-      status: 'PENDING'
+    const payload = {
+      fornecedorNome: data.supplierName || data.fornecedorNome || 'Fornecedor Novo',
+      fornecedorId: data.supplierId || data.fornecedorId || 'SEM_CODIGO',
+      numeroNf: data.nfNumber || data.numeroNf,
+      observacoes: data.observacoes,
+      itens: (data.items ?? data.itens ?? []).map((i: any) => ({
+        sku: i.skuId ?? i.sku,
+        descricao: i.description ?? i.descricao,
+        quantidadeEsperada: i.expectedQuantity ?? i.quantidadeEsperada ?? i.quantidade,
+      })),
     };
-    mockConferences.push(newConf);
-    return { data: { message: 'Conferência iniciada', conference: newConf } };
+    const resp = await http.post('/compras', payload);
+    return { data: resp.data };
   },
-  submit: async (id: string, data: any) => {
-    const conf = mockConferences.find(c => c.id === id);
-    if (!conf) throw new Error('Not found');
-    
-    conf.attempts = (conf.attempts || 0) + 1;
-    conf.checked_pieces = data.checkedPieces;
-    conf.damages = data.damages;
-    conf.has_damages = data.damageType === 'AVARIA';
 
-    if (data.checkedPieces !== conf.total_pieces) {
-      if (conf.attempts >= 3) {
-        conf.status = 'PCL_ANALYSIS';
-        mockPclDivergences.push({
-          id: `pcl-${conf.id}`,
-          nf_number: conf.nf_number,
-          purchase_order_id: conf.purchase_order_id,
-          supplier_name: conf.supplier_name,
-          error_type: data.damageType === 'AVARIA' ? 'AVARIA_MERCADORIA' : 'DIVERGENCIA_CONTAGEM',
-          total_pieces: conf.total_pieces,
-          checked_pieces: data.checkedPieces,
-          damages: data.damages,
-          attempts: conf.attempts,
-          status: 'IN_ANALYSIS'
-        });
-      } else {
-        conf.status = 'IN_PROGRESS';
-      }
-    } else {
-      conf.status = 'APPROVED';
-    }
-    
-    return { data: { status: conf.status } };
-  }
+  cancel: async (id: string, _reason?: string) => {
+    const resp = await http.patch(`/compras/${id}/cancelar`);
+    return { data: resp.data };
+  },
 };
 
+// ──────────────────────────── RECEBIMENTO ──────────────────────────
+export const receivingApi = {
+  list: async (params?: any) => {
+    const resp = await http.get('/recebimento', { params });
+    const dados = lista(resp).map((r: any) => ({
+      id: r.id,
+      purchase_order_id: r.pedidoCompraId,
+      supplier_name: r.fornecedorNome,
+      nf_number: r.numeroNf,
+      license_plate: r.placaVeiculo,
+      vehicle_type: r.tipoVeiculo,
+      driver_name: r.nomeMotorista,
+      start_time: r.horaInicio,
+      end_time: r.horaFim,
+      status: r.status,
+      po_status: r.status,
+    }));
+    return { data: { dados } };
+  },
+
+  start: async (data: any) => {
+    const payload = {
+      pedidoCompraId: data.purchaseOrderId ?? data.pedidoCompraId,
+      placaVeiculo: data.licensePlate ?? data.placaVeiculo,
+      tipoVeiculo: data.vehicleType ?? data.tipoVeiculo ?? 'TRUCK',
+      nomeMotorista: data.driverName ?? data.nomeMotorista,
+      doca: data.dock ?? data.doca,
+      numeroNf: data.nfNumber ?? data.numeroNf,
+      fornecedorNome: data.supplierName ?? data.fornecedorNome,
+      observacoes: data.observacoes,
+    };
+    const resp = await http.post('/recebimento', payload);
+    return { data: resp.data };
+  },
+
+  finish: async (id: string) => {
+    const resp = await http.patch(`/recebimento/${id}/finalizar`);
+    return { data: resp.data };
+  },
+};
+
+// ──────────────────────────── CONFERÊNCIA ──────────────────────────
+export const conferenceApi = {
+  list: async (params?: any) => {
+    const resp = await http.get('/conferencia', { params });
+    const dados = lista(resp).map((c: any) => ({
+      id: c.id,
+      recebimento_id: c.recebimentoId,
+      purchase_order_id: c.pedidoCompraId,
+      total_pieces: c.totalPecas,
+      checked_pieces: c.pecasConferidas,
+      attempts: c.tentativas ?? 0,
+      status: c.status,
+      created_at: c.criadoEm,
+    }));
+    return { data: { dados } };
+  },
+
+  start: async (data: any) => {
+    const payload = {
+      recebimentoId: data.recebimentoId ?? data.receivingId,
+      pedidoCompraId: data.purchaseOrderId ?? data.pedidoCompraId,
+      totalPecas: data.totalPieces ?? data.totalPecas,
+    };
+    const resp = await http.post('/conferencia', payload);
+    return { data: { message: 'Conferência iniciada', conference: resp.data?.data } };
+  },
+
+  submit: async (id: string, data: any) => {
+    const payload = {
+      pecasConferidas: data.checkedPieces ?? data.pecasConferidas,
+      avarias: data.damages ?? data.avarias ?? 0,
+      observacoes: data.observacoes,
+    };
+    const resp = await http.patch(`/conferencia/${id}/submeter`, payload);
+    const status = resp.data?.data?.status ?? resp.data?.status;
+    return { data: { status } };
+  },
+};
+
+// ──────────────────────────────── PCL ──────────────────────────────
 export const pclApi = {
   list: async (params?: any) => {
-    let list = mockPclDivergences;
-    if (params?.status) {
-      if (params.status === 'IN_ANALYSIS') {
-         list = list.filter(p => p.status === 'IN_ANALYSIS');
-      } else {
-         list = list.filter(p => p.status === params.status);
-      }
-    }
-    return { data: { dados: list } };
+    const resp = await http.get('/conferencia/pcl/divergencias', { params });
+    const dados = lista(resp).map((d: any) => ({
+      id: d.id,
+      purchase_order_id: d.pedidoCompraId,
+      total_pieces: d.totalPecas,
+      checked_pieces: d.pecasConferidas,
+      damages: d.avarias,
+      attempts: d.tentativas ?? 0,
+      status: d.status,
+    }));
+    return { data: { dados } };
   },
-  analyze: async (id: string, data: { approved: boolean, notes: string }) => {
-    const div = mockPclDivergences.find(d => d.id === id);
-    if (div) {
-      div.status = data.approved ? 'APPROVED' : 'REJECTED';
-      div.notes = data.notes;
-    }
-    return { data: { message: 'Análise registrada' } };
-  }
+
+  analyze: async (id: string, data: { approved: boolean; notes: string }) => {
+    const payload = {
+      decisao: data.approved ? 'APPROVE' : 'REJECT',
+      justificativa: data.notes,
+    };
+    const resp = await http.patch(`/conferencia/pcl/${id}/analisar`, payload);
+    return { data: resp.data };
+  },
 };
 
+// ──────────────────────────────── ESTOQUE ──────────────────────────
 export const stockApi = {
-  dashboard: async () => ({
-    data: { totalSkus: 142, totalPieces: 38420, availableStock: 35100, criticalItems: 7, totalValue: 1240000 }
-  }),
-  abc: async () => ({
-    data: [] // mock is generated inside component if empty
-  }),
+  dashboard: async () => {
+    const resp = await http.get('/estoque/dashboard');
+    const d = resp.data?.data ?? {};
+    return {
+      data: {
+        totalSkus: d.totalSkus ?? 0,
+        totalPieces: d.totalPecas ?? 0,
+        availableStock: d.totalPecas ?? 0,
+        criticalItems: d.totalCriticos ?? 0,
+        totalValue: d.valorTotal ?? 0,
+      },
+    };
+  },
+
+  abc: async () => {
+    const resp = await http.get('/estoque/curva-abc');
+    return { data: resp.data?.data ?? [] };
+  },
+
   move: async (data: any) => {
-    return { data: { movementId: 'MV-' + Date.now() } };
-  }
+    // Movimento entre localizações → /estoque/mover; senão movimentação genérica.
+    if (data?.localizacaoDestino || data?.destino) {
+      const resp = await http.patch('/estoque/mover', {
+        sku: data.sku,
+        localizacaoOrigem: data.localizacaoOrigem ?? data.origem,
+        localizacaoDestino: data.localizacaoDestino ?? data.destino,
+        quantidade: data.quantidade ?? data.quantity,
+      });
+      return { data: resp.data };
+    }
+    const resp = await http.post('/estoque/movimentar', {
+      sku: data.sku,
+      descricao: data.descricao ?? data.description,
+      tipo: data.tipo ?? data.type ?? 'ADJUSTMENT',
+      quantidade: data.quantidade ?? data.quantity,
+      motivo: data.motivo ?? data.reason,
+      referenciaId: data.referenciaId ?? data.referenceId,
+    });
+    return { data: { movementId: resp.data?.data?.movementId ?? resp.data?.movementId, ...resp.data } };
+  },
 };
+
+// ════════════════════════════════════════════════════════════════════
+//  ABAIXO: ainda SEM endpoint no backend — mantidos como mock (TODO).
+// ════════════════════════════════════════════════════════════════════
 
 let mockSchedules: any[] = [
-  { id: '1', supplier_name: 'Fornecedor Premium SA', nf_number: '1234', expected_at: new Date().toISOString(), status: 'SCHEDULED' }
+  { id: '1', supplier_name: 'Fornecedor Premium SA', nf_number: '1234', expected_at: new Date().toISOString(), status: 'SCHEDULED' },
 ];
 
+// TODO: criar módulo de Agendamento no backend.
 export const scheduleApi = {
-  list: async () => {
-    return { data: { dados: mockSchedules } };
-  },
+  list: async () => ({ data: { dados: mockSchedules } }),
   create: async (data: any) => {
     mockSchedules.push({
       id: String(Date.now()),
@@ -183,7 +242,7 @@ export const scheduleApi = {
       nf_number: data.nfNumber,
       expected_at: data.expectedAt,
       notes: data.notes,
-      status: 'SCHEDULED'
+      status: 'SCHEDULED',
     });
     return { data: { message: 'Agendamento criado' } };
   },
@@ -196,71 +255,37 @@ export const scheduleApi = {
     const s = mockSchedules.find(x => x.id === id);
     if (s) s.status = 'CANCELLED';
     return { data: { message: 'Cancelado' } };
-  }
+  },
 };
 
+// TODO: criar endpoint de analytics/score no backend.
 export const analyticsApi = {
   dashboard: async () => {
-    // Simulate delay
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 300));
     return {
       data: {
         data: {
           metrics: {
-            totalCompletedNFs: 142,
-            totalVehiclesReceived: 45,
-            totalPiecesChecked: 15420,
-            errorRate: 1.2,
-            totalDamages: 8,
-            totalDivergences: 12,
-            avgReceivingMin: 45,
-            avgConferenceMin: 82
+            totalCompletedNFs: 0, totalVehiclesReceived: 0, totalPiecesChecked: 0,
+            errorRate: 0, totalDamages: 0, totalDivergences: 0,
+            avgReceivingMin: 0, avgConferenceMin: 0,
           },
-          score: {
-            total: 92,
-            classification: 'Excelente'
-          },
-          history: Array.from({ length: 14 }).map((_, i) => ({
-            date: new Date(Date.now() - (13 - i) * 86400000).toISOString(),
-            total: Math.floor(Math.random() * 50) + 10,
-            completed: Math.floor(Math.random() * 40) + 10
-          })),
-          supplierScores: [
-            { supplier: 'Fornecedor Premium SA', score: 98, totalDeliveries: 45, divergences: 0, avgDeliveryTime: 32 },
-            { supplier: 'Distribuidora ABC', score: 85, totalDeliveries: 22, divergences: 3, avgDeliveryTime: 45 },
-            { supplier: 'Industria XPTO', score: 65, totalDeliveries: 12, divergences: 5, avgDeliveryTime: 120 }
-          ],
-          kpis: {
-            completed_pos: 142,
-            conference_pos: 12,
-            receiving_pos: 5,
-            pending_pos: 8,
-            cancelled_pos: 2
-          }
-        }
-      }
+          score: { total: 0, classification: '—' },
+          history: [],
+          supplierScores: [],
+          kpis: { completed_pos: 0, conference_pos: 0, receiving_pos: 0, pending_pos: 0, cancelled_pos: 0 },
+        },
+      },
     };
-  }
+  },
 };
 
+// TODO: o chat IA (AYDA) usa o Gemini direto no frontend (AiOrchestrator).
+// Este mock cobre o status/chat enquanto não há endpoint dedicado.
 export const aydaApi = {
   status: async () => ({ data: { dados: true } }),
-  chat: async (message: string, history: any[]) => {
-    // Generate a contextual mock response
-    let resposta = "Entendi. Como posso ajudar mais com as operações da Kingstar?";
-    const msgLower = message.toLowerCase();
-    
-    if (msgLower.includes("critico") || msgLower.includes("crítico")) {
-      resposta = "Atualmente temos **7 itens** em estoque crítico, a maioria na categoria de colchoes. Posso gerar um relatório detalhado se quiser.";
-    } else if (msgLower.includes("pedido")) {
-      resposta = "Para criar um pedido, você precisa ir na tela de **Compras / PCL**, clicar em 'Novo Pedido' e preencher o formulário. Posso te guiar passo a passo.";
-    } else if (msgLower.includes("atrasad") || msgLower.includes("atraso")) {
-      resposta = "No momento há **2 contêineres** atrasados aguardando recebimento na doca norte. Eles já foram sinalizados para o PCL.";
-    }
-    
-    // Simulate delay
-    await new Promise(r => setTimeout(r, 1000));
-    return { data: { dados: { resposta } } };
-  }
+  chat: async (message: string, _history: any[]) => {
+    await new Promise(r => setTimeout(r, 500));
+    return { data: { dados: { resposta: 'Assistente em modo local. Pergunte sobre as operações da Kingstar.' } } };
+  },
 };
-

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Package, Layers, AlertTriangle, DollarSign, TrendingUp } from 'lucide-react';
 import { stockApi } from '../../../services/api';
+import { useShell } from '../../shell/ShellProvider';
 
 interface Stats {
   totalSkus: number;
@@ -11,6 +12,7 @@ interface Stats {
 }
 
 export default function StockDashboard() {
+  const { canViewSensitive } = useShell();
   const [stats, setStats]     = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -51,13 +53,14 @@ export default function StockDashboard() {
       sub: 'abaixo do mínimo',
       alert: (stats?.criticalItems ?? 0) > 0,
     },
-    {
+    // 🔒 "Valor Total" (mercadoria) só para perfis com acesso a dados sigilosos.
+    ...(canViewSensitive ? [{
       label: 'Valor Total',
       value: loading ? '—' : `R$ ${((stats?.totalValue ?? 0)/1000).toFixed(0)}k`,
       icon: DollarSign,
       color: '#facc15',
       sub: 'custo médio ponderado',
-    },
+    }] : []),
   ];
 
   return (

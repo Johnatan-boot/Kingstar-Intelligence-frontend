@@ -31,21 +31,25 @@ class ModuleErrorBoundary extends Component<{ children: React.ReactNode }, { has
 
 // ── MFE Registry ─────────────────────────────────────────────────
 const MFE_REGISTRY = [
-  { id: 'ayda-core',   name: 'Ayda Core',    icon: BrainCircuit,   color: '#38bdf8', component: lazy(() => import('../mfe-ayda').then(m => ({ default: m.AydaCoreMfe }))) },
-  { id: 'finance',     name: 'Financeiro',   icon: DollarSign,     color: '#22c55e', component: lazy(() => import('../mfe-financeiro').then(m => ({ default: m.FinanceiroMfe })).catch(() => ({ default: () => <div className="p-10 text-emerald-400 font-mono text-center">MFE Financeiro em Desenvolvimento</div> }))) },
-  { id: 'inventory',   name: 'Estoque',      icon: PackageSearch,  color: '#f59e0b', component: lazy(() => import('../mfe-estoque').then(m => ({ default: m.InventoryMfe }))) },
-  { id: 'purchasing',  name: 'Compras',      icon: ShoppingCart,   color: '#ec4899', component: lazy(() => import('../mfe-compras').then(m => ({ default: m.PurchasingMfe }))) },
-  { id: 'receiving',   name: 'Recebimento',  icon: Truck,          color: '#8b5cf6', component: lazy(() => import('../mfe-recebimento').then(m => ({ default: m.ReceivingMfe }))) },
-  { id: 'conference',  name: 'Conferência',  icon: ClipboardCheck, color: '#06b6d4', component: lazy(() => import('../mfe-conferencia').then(m => ({ default: m.ConferenceMfe }))) },
-  { id: 'analytics',   name: 'Analytics',    icon: BarChart3,      color: '#ef4444', component: lazy(() => import('../mfe-analytics').then(m => ({ default: m.AnalyticsMfe }))) },
-  { id: 'schedule',    name: 'Agenda',       icon: CalendarDays,   color: '#10b981', component: lazy(() => import('../mfe-agenda').then(m => ({ default: m.AgendaMfe }))) },
+    { id: 'ayda-core', name: 'Ayda Core', icon: BrainCircuit, color: '#38bdf8', component: lazy(() => import('../mfe-ayda').then(m => ({ default: m.AydaCoreMfe }))) },
+    { id: 'purchasing', name: 'Compras', icon: ShoppingCart, color: '#ec4899', component: lazy(() => import('../mfe-compras').then(m => ({ default: m.PurchasingMfe }))) },
+    { id: 'receiving', name: 'Recebimento', icon: Truck, color: '#8b5cf6', component: lazy(() => import('../mfe-recebimento').then(m => ({ default: m.ReceivingMfe }))) },
+    { id: 'conference', name: 'Conferência', icon: ClipboardCheck, color: '#06b6d4', component: lazy(() => import('../mfe-conferencia').then(m => ({ default: m.ConferenceMfe }))) },
+    { id: 'schedule', name: 'Agenda', icon: CalendarDays, color: '#10b981', component: lazy(() => import('../mfe-agenda').then(m => ({ default: m.AgendaMfe }))) },
+    { id: 'inventory', name: 'Estoque', icon: PackageSearch, color: '#f59e0b', component: lazy(() => import('../mfe-estoque').then(m => ({ default: m.InventoryMfe }))) },
+    { id: 'analytics', name: 'Analytics', icon: BarChart3, color: '#ef4444', component: lazy(() => import('../mfe-analytics').then(m => ({ default: m.AnalyticsMfe }))) },
+    { id: 'finance', name: 'Financeiro', icon: DollarSign, color: '#22c55e', component: lazy(() => import('../mfe-financeiro').then(m => ({ default: m.FinanceiroMfe })).catch(() => ({ default: () => <div className="p-10 text-emerald-400 font-mono text-center">MFE Financeiro em Desenvolvimento</div> }))) },
+  
 ];
 
 // ── ShellLayout ───────────────────────────────────────────────────
 export function ShellLayout() {
-  const { user, activeMfe, navigate } = useShell();
+  const { user, activeMfe, navigate, permissions } = useShell();
 
-  const ActiveComponent = MFE_REGISTRY.find(m => m.id === activeMfe)?.component;
+  // Apenas os MFEs liberados para o perfil do usuário aparecem no menu.
+  const mfesVisiveis   = MFE_REGISTRY.filter(m => permissions.includes(m.id));
+  const temPermissao   = permissions.includes(activeMfe);
+  const ActiveComponent = temPermissao ? MFE_REGISTRY.find(m => m.id === activeMfe)?.component : undefined;
   const activeDef       = MFE_REGISTRY.find(m => m.id === activeMfe);
 
   return (
@@ -54,9 +58,9 @@ export function ShellLayout() {
       {/* Sidebar */}
       <aside className="w-64 bg-[#161616] border-r border-[#242424] flex flex-col h-full shrink-0 z-20">
         <div className="h-16 flex items-center px-6 border-b border-[#242424] shrink-0">
-          <div className="w-8 h-8 rounded bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center mr-3 shadow-[0_0_15px_rgba(56,189,248,0.4)]">
-            <span className="font-bold text-white tracking-widest text-lg leading-none">K</span>
-          </div>
+          <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center mr-3 shrink-0 bg-white/5 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.4)]">
+  <img className="w-full h-full object-contain p-0.5" src="../../assets/kingstar_logo.jpg" alt="KingStar" />
+</div>
           <div className="flex flex-col">
             <span className="font-bold text-sm tracking-widest leading-none text-white">KINGSTAR</span>
             <span className="text-[10px] text-sky-400 tracking-widest font-mono font-bold">MFE ORCHESTRATOR</span>
@@ -67,7 +71,7 @@ export function ShellLayout() {
           <div className="text-[10px] font-mono text-[#8b9dc3] uppercase px-3 mb-2 tracking-wider font-semibold">
             Microfrontends
           </div>
-          {MFE_REGISTRY.map(mfe => {
+          {mfesVisiveis.map(mfe => {
             const isActive = activeMfe === mfe.id;
             const Icon = mfe.icon;
             return (
@@ -128,7 +132,16 @@ export function ShellLayout() {
                 <span>CARREGANDO MFE [{activeMfe}] ...</span>
               </div>
             }>
-              {ActiveComponent ? <ActiveComponent /> : (
+              {ActiveComponent ? <ActiveComponent /> : !temPermissao ? (
+                <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-3">
+                  <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-2xl">🔒</div>
+                  <h2 className="text-white font-bold text-lg">Acesso restrito</h2>
+                  <p className="text-[#8b9dc3] text-sm max-w-sm">
+                    Seu perfil ({user.role}) não tem permissão para acessar esta área.
+                    Fale com um administrador caso precise de acesso.
+                  </p>
+                </div>
+              ) : (
                 <div className="flex items-center justify-center h-full p-8 text-red-400 font-mono text-sm">
                   [Shell Error] MFE não encontrado: {activeMfe}
                 </div>
