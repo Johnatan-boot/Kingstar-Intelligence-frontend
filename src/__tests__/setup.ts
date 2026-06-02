@@ -11,13 +11,7 @@ vi.mock('react-hot-toast', () => ({
   Toaster: () => null,
 }));
 
-vi.mock('../backend/infra/messaging/EventBus', () => ({
-  EventBus: { publish: vi.fn(), subscribe: vi.fn() },
-}));
-vi.mock('../../backend/infra/messaging/EventBus', () => ({
-  EventBus: { publish: vi.fn(), subscribe: vi.fn() },
-}));
-vi.mock('../../../backend/infra/messaging/EventBus', () => ({
+vi.mock('../infra/messaging/EventBus', () => ({
   EventBus: { publish: vi.fn(), subscribe: vi.fn() },
 }));
 

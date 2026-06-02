@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 import { GoogleGenAI } from '@google/genai';
-import { env } from '../../../../kingstar-intelligence-backend/src/shared/config/env';
 
 export interface AIMessage {
   role: 'user' | 'assistant' | 'system';
