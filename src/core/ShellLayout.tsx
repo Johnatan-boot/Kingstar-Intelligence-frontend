@@ -28,8 +28,8 @@ export function ShellLayout() {
       {/* Shell Controlled Sidebar */}
       <aside className="w-64 bg-[#161616] border-r border-[#242424] flex flex-col h-full shrink-0 z-20">
         <div className="h-16 flex items-center px-6 border-b border-[#242424] shrink-0">
-          <div className="w-8 h-8 rounded bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center mr-3 shadow-[0_0_15px_rgba(56,189,248,0.4)]">
-            <span className="font-bold text-white tracking-widest text-lg leading-none">K</span>
+          <div className="w-12 h-12 rounded bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center mr-3 shadow-[0_0_15px_rgba(56,189,248,0.4)]">
+  <img className="w-full h-full object-contain p-0.5" src="../../assets/logo_kingstar.png" alt="KingStar" />
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-sm tracking-widest leading-none text-white" style={{ letterSpacing: '0.1em' }}>KINGSTAR</span>

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { http, setAuthToken } from '../services/http';
+import { http, setAuthToken, getAuthToken } from '../services/http';
 
 export interface AuthUser {
   id: string;
@@ -19,9 +19,40 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const USER_KEY = 'kingstar.user';
+
+// Decodifica o usuário a partir do payload do JWT (fallback).
+function usuarioDoToken(token: string, email?: string): AuthUser {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return {
+      id: payload.sub ?? '',
+      nome: payload.name ?? '',
+      email: email ?? '',
+      funcao: payload.funcao ?? 'RECEBIMENTO',
+      departamento: payload.departamento ?? '',
+    };
+  } catch {
+    return { id: '', nome: email ?? '', email: email ?? '', funcao: 'RECEBIMENTO', departamento: '' };
+  }
+}
+
+// Reidrata a sessão salva (token + usuário) — chamado uma vez na inicialização.
+function carregarSessao(): AuthUser | null {
+  const token = getAuthToken(); // já vem do localStorage (ver http.ts)
+  if (!token) return null;
+  try {
+    const salvo = window.localStorage.getItem(USER_KEY);
+    if (salvo) return JSON.parse(salvo) as AuthUser;
+  } catch { /* ignora */ }
+  return usuarioDoToken(token);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [user, setUser] = useState<AuthUser | null>(null);
+  // Estado inicial já considera uma sessão persistida → não desloga no F5.
+  const sessaoInicial = carregarSessao();
+  const [user, setUser] = useState<AuthUser | null>(sessaoInicial);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!sessaoInicial);
 
   // POST /auth/login → { message, token, usuario }
   const login = async (email?: string, password?: string) => {
@@ -29,24 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = data?.token;
     if (!token) throw new Error('Resposta de login sem token');
 
-    setAuthToken(token);
+    setAuthToken(token); // persiste no localStorage
 
-    // O backend devolve `usuario`; se faltar, decodifica o payload do JWT.
-    let u: AuthUser | null = data?.usuario ?? null;
-    if (!u) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        u = {
-          id: payload.sub ?? '',
-          nome: payload.name ?? '',
-          email: email ?? '',
-          funcao: payload.funcao ?? 'RECEBIMENTO',
-          departamento: payload.departamento ?? '',
-        };
-      } catch {
-        u = { id: '', nome: email ?? '', email: email ?? '', funcao: 'RECEBIMENTO', departamento: '' };
-      }
-    }
+    const u: AuthUser = data?.usuario ?? usuarioDoToken(token, email);
+
+    try { window.localStorage.setItem(USER_KEY, JSON.stringify(u)); } catch { /* ignora */ }
 
     setUser(u);
     setIsAuthenticated(true);
@@ -59,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setAuthToken(null);
+    try { window.localStorage.removeItem(USER_KEY); } catch { /* ignora */ }
     setUser(null);
     setIsAuthenticated(false);
   };

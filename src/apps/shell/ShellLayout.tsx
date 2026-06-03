@@ -3,10 +3,11 @@ import React, { Suspense, lazy, Component } from 'react';
 import { useShell } from './ShellProvider';
 import {
   BrainCircuit, ShoppingCart, Truck, ClipboardCheck,
-  PackageSearch, BarChart3, CalendarDays, DollarSign
+  PackageSearch, BarChart3, CalendarDays, DollarSign, LogOut
 } from 'lucide-react';
 import AydaWidget from '../../components/AydaWidget';
 import { Toaster } from 'react-hot-toast';
+import { useAuth } from '../../context/AuthContext';
 
 // ── Error Boundary ────────────────────────────────────────────────
 class ModuleErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; error?: Error }> {
@@ -45,6 +46,7 @@ const MFE_REGISTRY = [
 // ── ShellLayout ───────────────────────────────────────────────────
 export function ShellLayout() {
   const { user, activeMfe, navigate, permissions } = useShell();
+  const { logout } = useAuth();
 
   // Apenas os MFEs liberados para o perfil do usuário aparecem no menu.
   const mfesVisiveis   = MFE_REGISTRY.filter(m => permissions.includes(m.id));
@@ -59,7 +61,7 @@ export function ShellLayout() {
       <aside className="w-64 bg-[#161616] border-r border-[#242424] flex flex-col h-full shrink-0 z-20">
         <div className="h-16 flex items-center px-6 border-b border-[#242424] shrink-0">
           <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center mr-3 shrink-0 bg-white/5 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.4)]">
-  <img className="w-full h-full object-contain p-0.5" src="../../assets/kingstar_logo.jpg" alt="KingStar" />
+  <img className="w-full h-full object-contain p-0.5" src="../../assets/logo_kingstar.png" alt="KingStar" />
 </div>
           <div className="flex flex-col">
             <span className="font-bold text-sm tracking-widest leading-none text-white">KINGSTAR</span>
@@ -102,6 +104,13 @@ export function ShellLayout() {
               <span className="text-[10px] text-[#8b9dc3] font-mono truncate">{user.role}</span>
             </div>
           </div>
+          <button
+            onClick={logout}
+            className="mt-1 flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 text-left outline-none text-[#8b9dc3] hover:text-red-400 hover:bg-red-500/10"
+          >
+            <LogOut size={20} />
+            <span className="tracking-wide">Sair</span>
+          </button>
         </div>
       </aside>
 

@@ -65,10 +65,9 @@ export default function AuthPage() {
 
         {/* Logo */}
         <div className="flex flex-col items-center gap-2 mb-2">
-          <div className="w-16 h-16 rounded-xl bg-kingstar-cyan/10 border border-kingstar-cyan/30 flex items-center justify-center">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
+          <div className="w-32 h-32 border-radius:12px; rounded-xl bg-kingstar-cyan/10 border border-kingstar-cyan/30 flex items-center justify-center">
+              <img className="w-32 h-32 border-radaius:12px;" src="../../assets/logo_kingstar.png" alt="KingStar" />
+
           </div>
           <h1 className="text-xl font-semibold text-white">KingStar WMS</h1>
           <p className="text-zinc-400 text-sm">Inteligência Operacional Logística</p>
