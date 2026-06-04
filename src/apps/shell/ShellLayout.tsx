@@ -1,4 +1,5 @@
 // src/apps/shell/ShellLayout.tsx
+import kingstarLogo from '../../assets/logo_kingstar.png';
 import React, { Suspense, lazy, Component } from 'react';
 import { useShell } from './ShellProvider';
 import {
@@ -61,7 +62,7 @@ export function ShellLayout() {
       <aside className="w-64 bg-[#161616] border-r border-[#242424] flex flex-col h-full shrink-0 z-20">
         <div className="h-16 flex items-center px-6 border-b border-[#242424] shrink-0">
           <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center mr-3 shrink-0 bg-white/5 border border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.4)]">
-  <img className="w-full h-full object-contain p-0.5" src="../../assets/logo_kingstar.png" alt="KingStar" />
+  <img className="w-full h-full object-contain p-0.5" src={kingstarLogo} alt="KingStar" />
 </div>
           <div className="flex flex-col">
             <span className="font-bold text-sm tracking-widest leading-none text-white">KINGSTAR</span>

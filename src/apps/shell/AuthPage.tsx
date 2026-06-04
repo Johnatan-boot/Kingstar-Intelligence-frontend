@@ -1,3 +1,4 @@
+import kingstarLogo from '../../assets/logo_kingstar.png';
 import React, { useState } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
@@ -66,7 +67,7 @@ export default function AuthPage() {
         {/* Logo */}
         <div className="flex flex-col items-center gap-2 mb-2">
           <div className="w-32 h-32 border-radius:12px; rounded-xl bg-kingstar-cyan/10 border border-kingstar-cyan/30 flex items-center justify-center">
-              <img className="w-32 h-32 border-radaius:12px;" src="../../assets/logo_kingstar.png" alt="KingStar" />
+              <img className="w-32 h-32 border-radaius:12px;" src={kingstarLogo} alt="KingStar" />
 
           </div>
           <h1 className="text-xl font-semibold text-white">KingStar WMS</h1>
