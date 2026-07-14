@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+const fs = require('fs');
+const file = 'src/components/dashboard/KpiCards.tsx';
+let content = `import React, { useState, useEffect } from 'react';
 import { Package, Truck, ClipboardCheck, AlertTriangle, Activity, Zap } from 'lucide-react';
 import { analyticsApi } from '../../services/api';
 
@@ -33,7 +35,7 @@ export function KpiCards() {
         <div 
           key={kpi.label} 
           className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 flex flex-col gap-4 relative overflow-hidden group hover:border-[#38bdf8]/50 transition-colors duration-300"
-          style={{ animationDelay: `${i * 60}ms` }}
+          style={{ animationDelay: \`\${i * 60}ms\` }}
         >
           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none group-hover:scale-110 transition-transform duration-500">
             <kpi.icon size={64} color={kpi.color} />
@@ -44,7 +46,7 @@ export function KpiCards() {
             </h3>
             <div 
               className="p-1.5 rounded-lg flex items-center justify-center shrink-0" 
-              style={{ backgroundColor: `${kpi.color}15` }}
+              style={{ backgroundColor: \`\${kpi.color}15\` }}
             >
               <kpi.icon size={16} color={kpi.color} />
             </div>
@@ -54,7 +56,7 @@ export function KpiCards() {
               {kpi.value}
             </div>
             <div className="flex items-center gap-1.5 mt-1.5">
-              <span className={`text-xs font-bold font-mono ${kpi.up ? 'text-emerald-500' : 'text-red-500'}`}>
+              <span className={\`text-xs font-bold font-mono \${kpi.up ? 'text-emerald-500' : 'text-red-500'}\`}>
                 {kpi.up ? '↑' : '↓'}
               </span>
               <span className="text-xs text-[var(--text-muted)] font-medium">
@@ -67,3 +69,5 @@ export function KpiCards() {
     </div>
   );
 }
+`;
+fs.writeFileSync(file, content);

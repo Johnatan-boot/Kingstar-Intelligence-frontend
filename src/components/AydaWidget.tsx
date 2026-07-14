@@ -1,43 +1,75 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, RefreshCw, ChevronDown, Loader2, CheckCircle2, Wrench } from 'lucide-react';
-import { useAydaChat, nomeAmigavel } from '../hooks/useAydaChat';
+import { Bot, Send, RefreshCw, Zap, X, ChevronDown, MessageSquare } from 'lucide-react';
+import { aydaApi } from '../services/api';
+
+interface Message { role: 'user' | 'assistant'; content: string; timestamp: Date; }
 
 const QUICK_ACTIONS = [
   'Quantos itens estão em estoque crítico?',
-  'Quais pedidos estão em atraso?',
-  'Qual fornecedor mais atrasa?',
+  'Como criar pedido?',
+  'O que está atrasado?',
 ];
 
-const WELCOME =
-  'Olá! 👋 Sou a **Ayda**, assistente inteligente do KingStar WMS. Pergunte qualquer coisa sobre as operações — você vai ver, em tempo real, quais automações eu executo para responder.';
-
-function renderContent(content: string) {
-  return content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
-}
+const WELCOME = `Olá! 👋 Sou a **Ayda**, assistente inteligente do KingStar WMS. Pergunte qualquer coisa sobre as operações da Kingstar!`;
 
 export default function AydaWidget() {
   const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'assistant', content: WELCOME, timestamp: new Date() },
+  ]);
   const [input, setInput] = useState('');
-  const { messages, send, loading, online, checkStatus, clear } = useAydaChat();
+  const [loading, setLoading] = useState(false);
+  const [botStatus, setBotStatus] = useState<any>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isOpen) endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isOpen) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, isOpen]);
 
   useEffect(() => {
-    checkStatus();
-  }, [checkStatus]);
+    aydaApi.status().then(r => setBotStatus(r.data.dados)).catch(() => {});
+  }, []);
 
-  const handleSend = (text?: string) => {
+  const send = async (text?: string) => {
     const msg = text ?? input.trim();
     if (!msg || loading) return;
     setInput('');
-    send(msg);
+
+    const userMsg: Message = { role: 'user', content: msg, timestamp: new Date() };
+    setMessages(prev => [...prev, userMsg]);
+    setLoading(true);
+
+    try {
+      const historico = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
+      const res = await aydaApi.chat(msg, historico);
+      const assistantMsg: Message = {
+        role: 'assistant',
+        content: res.data.dados?.resposta ?? 'Desculpe, não consegui processar sua mensagem.',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'Desculpe, ocorreu um erro. Tente novamente.',
+        timestamp: new Date(),
+      }]);
+    } finally { setLoading(false); }
+  };
+
+  const clear = () => setMessages([{ role: 'assistant', content: WELCOME, timestamp: new Date() }]);
+
+  const renderContent = (content: string) => {
+    return content
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br/>');
   };
 
   return (
     <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 9999 }}>
+      {/* Widget Button */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
@@ -56,9 +88,10 @@ export default function AydaWidget() {
         </button>
       )}
 
+      {/* Chat Popover */}
       {isOpen && (
         <div style={{
-          width: 400, height: 640, background: '#161616',
+          width: 380, height: 600, background: '#161616',
           border: '1px solid #242424', borderRadius: 16,
           boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
           display: 'flex', flexDirection: 'column',
@@ -74,8 +107,8 @@ export default function AydaWidget() {
                 <h1 style={{ fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, margin: 0, color: '#fff' }}>
                   Ayda <span style={{ fontSize: 9, background: '#38bdf820', color: '#38bdf8', padding: '2px 6px', borderRadius: 10, fontWeight: 700 }}>IA</span>
                 </h1>
-                <p style={{ fontSize: 11, color: online ? '#4ade80' : '#8b9dc3', margin: 0, marginTop: 2 }}>
-                  {online === null ? 'Conectando...' : online ? '● Online (web-automate ativo)' : '● Backend/web-automate offline'}
+                <p style={{ fontSize: 11, color: '#8b9dc3', margin: 0, marginTop: 2 }}>
+                  {botStatus ? 'Online' : 'Conectando...'}
                 </p>
               </div>
             </div>
@@ -89,10 +122,10 @@ export default function AydaWidget() {
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* Quick Actions (Horizontal scroll) */}
           <div style={{ display: 'flex', gap: 8, padding: '12px 16px', overflowX: 'auto', borderBottom: '1px solid #242424' }} className="hide-scrollbar">
             {QUICK_ACTIONS.map((action, i) => (
-              <button key={i} onClick={() => handleSend(action)}
+              <button key={i} onClick={() => send(action)}
                 style={{
                   flexShrink: 0, padding: '6px 12px',
                   borderRadius: 12, border: '1px solid #242424',
@@ -107,71 +140,47 @@ export default function AydaWidget() {
           </div>
 
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {messages.length === 0 && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: '#38bdf820', border: '1px solid #38bdf840', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Bot size={14} color="#38bdf8" />
-                </div>
-                <div style={{ maxWidth: '85%', padding: '10px 14px', borderRadius: '14px 14px 14px 2px', background: '#121212', border: '1px solid #242424', color: '#e5e5e5', fontSize: 13, lineHeight: 1.5 }}
-                  dangerouslySetInnerHTML={{ __html: renderContent(WELCOME) }} />
-              </div>
-            )}
-            {messages.map((msg) => (
-              <div key={msg.id} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 8 }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {messages.map((msg, i) => (
+              <div key={i} style={{
+                display: 'flex',
+                justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                gap: 8,
+              }}>
                 {msg.role === 'assistant' && (
                   <div style={{ width: 28, height: 28, borderRadius: 8, background: '#38bdf820', border: '1px solid #38bdf840', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Bot size={14} color="#38bdf8" />
                   </div>
                 )}
-                <div style={{ maxWidth: '85%', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {/* Passos de automação em tempo real */}
-                  {msg.role === 'assistant' && msg.steps && msg.steps.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {msg.steps.map(step => (
-                        <div key={step.id} style={{
-                          display: 'flex', alignItems: 'center', gap: 6,
-                          fontSize: 11, padding: '6px 10px', borderRadius: 10,
-                          background: step.status === 'rodando' ? '#38bdf815' : '#4ade8015',
-                          border: `1px solid ${step.status === 'rodando' ? '#38bdf840' : '#4ade8040'}`,
-                          color: step.status === 'rodando' ? '#38bdf8' : '#4ade80',
-                        }}>
-                          {step.status === 'rodando'
-                            ? <Loader2 size={12} className="animate-spin" />
-                            : <CheckCircle2 size={12} />}
-                          <Wrench size={11} style={{ opacity: 0.7 }} />
-                          <span>{nomeAmigavel(step.ferramenta)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {(msg.content || msg.isStreaming) && (
-                    <div style={{
-                      padding: '10px 14px',
-                      borderRadius: msg.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
-                      background: msg.role === 'user' ? 'linear-gradient(135deg, #38bdf8, #0ea5e9)' : '#121212',
-                      border: msg.role === 'user' ? 'none' : '1px solid #242424',
-                      color: msg.role === 'user' ? '#fff' : '#e5e5e5',
-                      fontSize: 13, lineHeight: 1.5,
-                    }}>
-                      {msg.content ? (
-                        <div dangerouslySetInnerHTML={{ __html: renderContent(msg.content) }} />
-                      ) : (
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          {[0, 1, 2].map(i => (
-                            <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: '#38bdf8', animation: `bounce 1.2s ${i * 0.2}s infinite` }} />
-                          ))}
-                        </div>
-                      )}
-                      <p style={{ fontSize: 9, marginTop: 4, opacity: 0.6, textAlign: 'right' }}>
-                        {msg.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  )}
+                <div style={{
+                  maxWidth: '80%',
+                  padding: '10px 14px',
+                  borderRadius: msg.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                  background: msg.role === 'user' ? 'linear-gradient(135deg, #38bdf8, #0ea5e9)' : '#121212',
+                  border: msg.role === 'user' ? 'none' : '1px solid #242424',
+                  color: msg.role === 'user' ? '#fff' : '#e5e5e5',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}>
+                  <div dangerouslySetInnerHTML={{ __html: renderContent(msg.content) }} />
+                  <p style={{ fontSize: 9, marginTop: 4, opacity: 0.6, textAlign: 'right' }}>
+                    {msg.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
                 </div>
               </div>
             ))}
+            {loading && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: '#38bdf820', border: '1px solid #38bdf840', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Bot size={14} color="#38bdf8" />
+                </div>
+                <div style={{ padding: '10px 14px', background: '#121212', border: '1px solid #242424', borderRadius: '14px 14px 14px 2px', display: 'flex', gap: 4, alignItems: 'center' }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: '#38bdf8', animation: `bounce 1.2s ${i * 0.2}s infinite` }} />
+                  ))}
+                </div>
+              </div>
+            )}
             <div ref={endRef} />
           </div>
 
@@ -181,11 +190,11 @@ export default function AydaWidget() {
               <input
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
                 placeholder="Mensagem para Ayda..."
                 style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 13 }}
               />
-              <button onClick={() => handleSend()} disabled={!input.trim() || loading}
+              <button onClick={() => send()} disabled={!input.trim() || loading}
                 style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: input.trim() && !loading ? 'linear-gradient(135deg, #38bdf8, #0ea5e9)' : '#242424', color: '#fff', cursor: input.trim() && !loading ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
                 <Send size={12} style={{ marginLeft: 2 }} />
               </button>
@@ -199,8 +208,6 @@ export default function AydaWidget() {
         @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .animate-spin { animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );

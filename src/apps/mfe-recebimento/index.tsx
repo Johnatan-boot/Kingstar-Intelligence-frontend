@@ -181,7 +181,7 @@ export function ReceivingMfe() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#242424]">
-                {receivings.map(rec => (
+                {receivings.filter(rec => rec.po_status !== 'CONFERENCE' && rec.po_status !== 'COMPLETED').map(rec => (
                    <React.Fragment key={rec.id}>
                     <tr onClick={() => toggle(rec.id)} className="cursor-pointer hover:bg-[#ffffff05] transition-colors group">
                       <td className="px-4 py-4 text-gray-500 group-hover:text-gray-300 transition-colors w-10">

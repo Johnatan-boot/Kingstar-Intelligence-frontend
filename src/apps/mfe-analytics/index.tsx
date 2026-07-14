@@ -14,10 +14,14 @@ export function AnalyticsMfe() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    analyticsApi.dashboard()
-      .then(res => setData(res.data.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const fetch = () => {
+      analyticsApi.dashboard()
+        .then(res => { setData(res.data.data); setLoading(false); })
+        .catch(() => setLoading(false));
+    };
+    fetch();
+    const interval = setInterval(fetch, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   if (loading) return (

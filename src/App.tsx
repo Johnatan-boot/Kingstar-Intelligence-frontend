@@ -6,11 +6,10 @@ import AuthPage from './apps/shell/AuthPage';
 
 function AppContent() {
   const { isAuthenticated } = useAuth();
+  console.log("Está autenticado?", isAuthenticated); // Verifique isso no console do F12
   
-  if (!isAuthenticated) {
-    return <AuthPage />;
-  }
-
+  if (!isAuthenticated) return <AuthPage />;
+  
   return (
     <ShellProvider>
       <ShellLayout />

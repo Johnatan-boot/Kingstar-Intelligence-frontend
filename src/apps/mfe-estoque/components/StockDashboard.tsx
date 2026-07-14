@@ -10,16 +10,26 @@ interface Stats {
   totalValue: number;
 }
 
-export default function StockDashboard() {
+export default function StockDashboard({ data }: { data?: any[] }) {
   const [stats, setStats]     = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    stockApi.dashboard()
-      .then((d: any) => setStats(d?.data || { totalSkus:142, totalPieces:38420, availableStock:35100, criticalItems:7, totalValue:1240000 }))
-      .catch(() => setStats({ totalSkus:142, totalPieces:38420, availableStock:35100, criticalItems:7, totalValue:1240000 }))
-      .finally(() => setLoading(false));
-  }, []);
+    if (data && data.length > 0) {
+      const totalSkus = data.length;
+      const totalPieces = data.reduce((acc, r) => acc + (r.quantity_physical || 0), 0);
+      const availableStock = data.reduce((acc, r) => acc + (r.quantity_available || 0), 0);
+      const criticalItems = data.filter(r => r.status === 'CRITICO' || r.status === 'RUPTURA').length;
+      const totalValue = data.reduce((acc, r) => acc + ((r.quantity_physical || 0) * (r.average_cost || 0)), 0);
+      setStats({ totalSkus, totalPieces, availableStock, criticalItems, totalValue });
+      setLoading(false);
+    } else {
+      stockApi.dashboard()
+        .then((d: any) => setStats(d?.data || { totalSkus:142, totalPieces:38420, availableStock:35100, criticalItems:7, totalValue:1240000 }))
+        .catch(() => setStats({ totalSkus:142, totalPieces:38420, availableStock:35100, criticalItems:7, totalValue:1240000 }))
+        .finally(() => setLoading(false));
+    }
+  }, [data]);
 
   const cards = [
     {

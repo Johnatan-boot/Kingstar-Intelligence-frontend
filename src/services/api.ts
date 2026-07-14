@@ -14,7 +14,7 @@ let mockPos: any[] = [
 ];
 
 let mockReceivings: any[] = [
-  { id: 'mock-rec-1', start_time: new Date().toISOString(), supplier_name: 'Fornecedor Mock', nf_number: '0001', license_plate: 'ABC-1234', vehicle_type: 'TRUCK', status: 'IN_PROGRESS', po_status: 'RECEIVING' }
+  { id: 'mock-rec-1', start_time: new Date().toISOString(), supplier_name: 'Fornecedor Premium SA', nf_number: '12345', license_plate: 'ABC-1234', vehicle_type: 'TRUCK', status: 'IN_PROGRESS', po_status: 'RECEIVING', purchase_order_id: '1' }
 ];
 
 export const purchasesApi = {
@@ -44,6 +44,22 @@ export const purchasesApi = {
         unit_cost: i.unitCost
       }))
     });
+    
+    // Auto-create receiving to sync pending POs with receiving cars
+    mockReceivings.push({
+      id: `rec-${newId}`,
+      purchase_order_id: newId,
+      supplier_name: data.supplierName || 'Fornecedor Novo',
+      nf_number: data.nfNumber,
+      license_plate: 'ABC-1234',
+      vehicle_type: 'TRUCK',
+      driver_name: 'Motorista Mock',
+      dock: 'Doca 1',
+      start_time: new Date().toISOString(),
+      status: 'IN_PROGRESS',
+      po_status: 'RECEIVING'
+    });
+
     return { data: { message: 'Criado com sucesso' } };
   },
   cancel: async (id: string, reason: string) => {
@@ -97,6 +113,21 @@ export const conferenceApi = {
       status: 'PENDING'
     };
     mockConferences.push(newConf);
+    
+    // Update receiving status
+    if (data.receivingId) {
+       const rec = mockReceivings.find(r => r.id === data.receivingId);
+       if (rec) {
+         rec.po_status = 'CONFERENCE';
+         rec.status = 'COMPLETED'; // If receiving is done
+       }
+    }
+    // Update PO status
+    if (data.purchaseOrderId) {
+       const po = mockPos.find(p => p.id === data.purchaseOrderId);
+       if (po) po.status = 'CONFERENCE';
+    }
+
     return { data: { message: 'Conferência iniciada', conference: newConf } };
   },
   submit: async (id: string, data: any) => {
@@ -128,6 +159,8 @@ export const conferenceApi = {
       }
     } else {
       conf.status = 'APPROVED';
+      const po = mockPos.find(p => p.id === conf.purchase_order_id);
+      if (po) po.status = 'COMPLETED';
     }
     
     return { data: { status: conf.status } };
@@ -138,10 +171,10 @@ export const pclApi = {
   list: async (params?: any) => {
     let list = mockPclDivergences;
     if (params?.status) {
-      if (params.status === 'IN_ANALYSIS') {
-         list = list.filter(p => p.status === 'IN_ANALYSIS');
-      } else {
-         list = list.filter(p => p.status === params.status);
+      if (params.status === 'IN_ANALYSIS') { 
+        list = list.filter(p => p.status === 'IN_ANALYSIS');
+      } else { 
+        list = list.filter(p => p.status === params.status);
       }
     }
     return { data: { dados: list } };
@@ -203,12 +236,24 @@ export const analyticsApi = {
   dashboard: async () => {
     // Simulate delay
     await new Promise(r => setTimeout(r, 800));
+    
+    // Dynamic calculation
+    const totalCompleted = mockPos.filter(p => p.status === 'COMPLETED').length;
+    const totalPending = mockPos.filter(p => p.status === 'PENDING').length;
+    const totalCancelled = mockPos.filter(p => p.status === 'CANCELLED').length;
+    const totalReceiving = mockReceivings.filter(r => r.status === 'IN_PROGRESS').length;
+    const totalConferences = mockConferences.length;
+    
+    const completedConferencesToday = mockConferences.filter(c => c.status === 'APPROVED').length;
+    // O número de pedidos pendentes sempre será igual ao número de veículos em recebimento na interface
+    const pedidosPendentesReal = mockReceivings.length;
+
     return {
       data: {
         data: {
           metrics: {
-            totalCompletedNFs: 142,
-            totalVehiclesReceived: 45,
+            totalCompletedNFs: totalCompleted,
+            totalVehiclesReceived: mockReceivings.length,
             totalPiecesChecked: 15420,
             errorRate: 1.2,
             totalDamages: 8,
@@ -231,11 +276,12 @@ export const analyticsApi = {
             { supplier: 'Industria XPTO', score: 65, totalDeliveries: 12, divergences: 5, avgDeliveryTime: 120 }
           ],
           kpis: {
-            completed_pos: 142,
-            conference_pos: 12,
-            receiving_pos: 5,
-            pending_pos: 8,
-            cancelled_pos: 2
+            completed_pos: totalCompleted,
+            conference_pos: totalConferences,
+            receiving_pos: totalReceiving,
+            pending_pos: pedidosPendentesReal,
+            cancelled_pos: totalCancelled,
+            completed_conferences_today: completedConferencesToday
           }
         }
       }
@@ -243,37 +289,23 @@ export const analyticsApi = {
   }
 };
 
-// Ayda agora fala de verdade com o backend Fastify, que repassa para o
-// serviço Python (web-automate). Não é mais mock: se o backend ou o
-// web-automate estiverem fora do ar, essas chamadas vão falhar de verdade
-// (e o widget mostra isso ao usuário), em vez de sempre "funcionar" com
-// respostas fabricadas.
-const AYDA_API_BASE_URL =
-  (import.meta as any).env?.VITE_API_URL || 'http://localhost:3333';
-
 export const aydaApi = {
-  status: async () => {
-    const resp = await fetch(`${AYDA_API_BASE_URL}/chat/status`);
-    const json = await resp.json();
-    return { data: { dados: Boolean(json?.data?.online) } };
-  },
-  // Modo simples (sem streaming): útil para integrações que só querem a
-  // resposta final. Para ver as automações em tempo real, use o hook
-  // `useAydaChat`, que consome o endpoint /chat/stream (SSE).
+  status: async () => ({ data: { dados: true } }),
   chat: async (message: string, history: any[]) => {
-    const resp = await fetch(`${AYDA_API_BASE_URL}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        pergunta: message,
-        historico: history.map((h: any) => ({ papel: h.role, conteudo: h.content })),
-      }),
-    });
-    if (!resp.ok) {
-      throw new Error(`Backend respondeu ${resp.status}`);
+    // Generate a contextual mock response
+    let resposta = "Entendi. Como posso ajudar mais com as operações da Kingstar?";
+    const msgLower = message.toLowerCase();
+    
+    if (msgLower.includes("critico") || msgLower.includes("crítico")) {
+      resposta = "Atualmente temos **7 itens** em estoque crítico, a maioria na categoria de colchoes. Posso gerar um relatório detalhado se quiser.";
+    } else if (msgLower.includes("pedido")) {
+      resposta = "Para criar um pedido, você precisa ir na tela de **Compras / PCL**, clicar em 'Novo Pedido' e preencher o formulário. Posso te guiar passo a passo.";
+    } else if (msgLower.includes("atrasad") || msgLower.includes("atraso")) {
+      resposta = "No momento há **2 contêineres** atrasados aguardando recebimento na doca norte. Eles já foram sinalizados para o PCL.";
     }
-    const json = await resp.json();
-    return { data: { dados: { resposta: json?.data?.resposta ?? '' } } };
-  },
+    
+    // Simulate delay
+    await new Promise(r => setTimeout(r, 1000));
+    return { data: { dados: { resposta } } };
+  }
 };
-

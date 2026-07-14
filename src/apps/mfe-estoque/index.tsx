@@ -3,8 +3,10 @@ import {
   Package, Activity, MapPin, RefreshCw,
   Search, ChevronDown, ChevronUp, Download,
   BarChart2, Bell, Layers, SlidersHorizontal,
-  X, ArrowUpDown, TrendingUp,
+  X, ArrowUpDown, TrendingUp, Upload
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import toast from 'react-hot-toast';
 
 import StockDashboard   from './components/StockDashboard';
 import MoveStockModal   from './components/MoveStockModal';
@@ -85,10 +87,148 @@ export function InventoryMfe() {
   const [showExport, setShowExport] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [stockData, setStockData]   = useState<StockRow[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => { setStockData(buildMockData()); }, [refreshKey]);
 
   const refresh = () => setRefreshKey(k => k + 1);
+
+    const handleDownloadTemplate = () => {
+    // Generate template based on current stockData (which contains the 32 mock items)
+    const templateData = stockData.map(item => ({
+      'SKU': item.sku_id,
+      'Produto': item.description,
+      'Pedido': item.order_number || '',
+      'NF': item.nf_number || '',
+      'Categoria': item.category,
+      'Estoque Máximo': item.quantity_physical,
+      'Estoque Atual': item.quantity_available,
+      'Valor Unitário (R$)': item.average_cost,
+      'Valor Total (R$)': item.total_value,
+      'Status': item.status,
+      'Localização': item.location_code || 'A01-01'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Modelo_Estoque");
+    XLSX.writeFile(wb, "modelo_importacao_estoque.xlsx");
+    toast.success('Modelo Excel com os dados atuais baixado com sucesso!');
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawData = XLSX.utils.sheet_to_json<any>(ws);
+
+        let processedData: any[] = [];
+        if (rawData.length > 0) {
+          const firstRow = rawData[0];
+          const keys = Object.keys(firstRow);
+          if (keys.length === 1 && typeof keys[0] === 'string' && keys[0].includes('|') && keys[0].toLowerCase().includes('sku')) {
+            const headerStr = keys[0];
+            const headers = headerStr.split('|').map(s => s.trim()).filter(s => s);
+            
+            rawData.forEach(row => {
+              const valStr = row[keys[0]];
+              if (typeof valStr === 'string' && valStr.includes('|')) {
+                if (valStr.includes('---')) return;
+                
+                const values = valStr.split('|').map(s => s.trim()).filter(s => s);
+                if (values.length >= headers.length || values.length > 0) {
+                   const obj: any = {};
+                   headers.forEach((h, i) => {
+                     if (values[i] !== undefined) obj[h] = values[i];
+                   });
+                   processedData.push(obj);
+                }
+              }
+            });
+          } else {
+             processedData = rawData;
+          }
+        }
+
+        const getVal = (r: any, keys: string[]) => {
+          const rowKeys = Object.keys(r);
+          for (const k of keys) {
+             const kNorm = k.normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+             const foundKey = rowKeys.find(rk => {
+               const rkNorm = rk.replace(/\|/g, '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+               if (!rkNorm) return false;
+               return rkNorm === kNorm || (kNorm.length >= 4 && rkNorm.includes(kNorm));
+             });
+             if (foundKey !== undefined && r[foundKey] !== undefined && r[foundKey] !== null && String(r[foundKey]).trim() !== '') {
+               let val = r[foundKey];
+               if (typeof val === 'string') {
+                 val = val.replace(/\|/g, '').trim();
+               }
+               return val;
+             }
+          }
+          return undefined;
+        };
+
+        const parseFloatSafe = (val: any) => {
+          if (typeof val === 'number') return val;
+          if (typeof val !== 'string') return 0;
+          let s = val.replace(/\|/g, '').trim().replace(/R\$\s?/g, '');
+          if (s.includes(',') && s.includes('.')) {
+            if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+              s = s.replace(/\./g, '').replace(',', '.');
+            } else {
+              s = s.replace(/,/g, '');
+            }
+          } else if (s.includes(',')) {
+            s = s.replace(',', '.');
+          }
+          const parsed = parseFloat(s);
+          return isNaN(parsed) ? 0 : parsed;
+        };
+
+                                const mappedData: StockRow[] = processedData
+          .filter((row: any) => {
+             // Ignorar linhas de separador markdown (ex: | --- | --- |)
+             const vals = Object.values(row).map(v => String(v));
+             const isSeparator = vals.some(v => v.includes('---'));
+             return !isSeparator;
+          })
+          .map((row: any) => ({
+            sku_id: getVal(row, ['sku_id', 'sku']) || `SKU-${Math.floor(Math.random() * 10000)}`,
+            description: getVal(row, ['description', 'descricao', 'descrição', 'produto']) || 'Produto Importado',
+            category: getVal(row, ['category', 'categoria']) || 'Geral',
+            quantity_physical: parseFloatSafe(getVal(row, ['quantity_physical', 'qtd fisico', 'físico', 'fisico', 'estoque maximo'])),
+            quantity_reserved: parseFloatSafe(getVal(row, ['quantity_reserved', 'qtd reservado', 'reservado'])),
+            quantity_available: parseFloatSafe(getVal(row, ['quantity_available', 'qtd disponivel', 'disponivel', 'estoque atual'])),
+            average_cost: parseFloatSafe(getVal(row, ['average_cost', 'custo', 'custo medio', 'valor unitario', 'valor unitario (r$)'])),
+            total_value: parseFloatSafe(getVal(row, ['total_value', 'valor total', 'total', 'valor total (r$)'])) || (parseFloatSafe(getVal(row, ['quantity_physical', 'qtd fisico', 'físico', 'fisico', 'estoque maximo'])) * parseFloatSafe(getVal(row, ['average_cost', 'custo', 'custo medio', 'valor unitario', 'valor unitario (r$)']))),
+            status: getVal(row, ['status']) || 'NORMAL',
+            location_code: getVal(row, ['location_code', 'localizacao', 'localização']) || 'A01-01',
+            zone: getVal(row, ['zone', 'zona']) || 'A',
+            order_number: getVal(row, ['order_number', 'pedido', 'nº pedido', 'numero pedido']) || '',
+            nf_number: getVal(row, ['nf_number', 'nf', 'nota fiscal', 'nº nf', 'nota']) || '',
+            last_movement_at: new Date().toISOString()
+          }))
+          .filter(r => !r.sku_id.includes('...') && !r.description.includes('...') && r.sku_id !== 'SKU');
+
+        setStockData(mappedData);
+        toast.success(`Importados ${mappedData.length} registros com sucesso!`);
+      } catch (err) {
+        console.error(err);
+        toast.error('Erro ao importar o arquivo Excel.');
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
 
   const TABS: { id: string; label: string; icon: any; badge?: number }[] = [
     { id: 'overview',  label: 'Posição de Estoque', icon: Package },
@@ -114,34 +254,34 @@ export function InventoryMfe() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button style={{ padding: '8px 16px', background: '#1a1a1a', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={refresh}><RefreshCw size={14} /> Atualizar</button>
+          <button style={{ padding: '8px 16px', background: '#1a1a1a', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={refresh}><RefreshCw size={14} /> Atualizar / Reset</button>
+          <button style={{ padding: '8px 16px', background: '#1a1a1a', border: '1px solid #333', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleDownloadTemplate}><Download size={14} /> Baixar Modelo Excel</button>
+          <input type="file" accept=".xlsx, .xls" style={{ display: 'none' }} ref={fileInputRef} onChange={handleImport} />
+          <button style={{ padding: '8px 16px', background: '#1a1a1a', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Importar Planilha</button>
           <button style={{ padding: '8px 16px', background: '#1a1a1a', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowExport(true)}><Download size={14} /> Exportar</button>
           <button style={{ padding: '8px 16px', background: '#1a1a1a', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowBatch(true)}><Layers size={14} /> Ajuste em Lote</button>
           <button style={{ padding: '8px 16px', background: '#22c55e', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }} onClick={() => setShowMove(true)}><Activity size={14} /> Movimentar</button>
         </div>
       </div>
 
-      <StockDashboard key={`dash-${refreshKey}`} />
+      <StockDashboard key={`dash-${refreshKey}`} data={stockData} />
 
       <div style={{ borderBottom: '1px solid #242424', display: 'flex', gap: '2px', overflowX: 'auto' }}>
         {TABS.map(({ id, label, icon: Icon, badge }) => (
           <button key={id} onClick={() => setTab(id as any)} style={{
             padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer',
-            color: tab === id ? '#22c55e' : '#8b9dc3',
-            borderBottom: `2px solid ${tab === id ? '#22c55e' : 'transparent'}`,
-            fontSize: '13px', fontWeight: 500, fontFamily: 'inherit',
-            display: 'flex', alignItems: 'center', gap: '6px',
-            transition: 'all 0.15s', marginBottom: '-1px', whiteSpace: 'nowrap',
+            borderBottom: `2px solid ${tab === id ? '#38bdf8' : 'transparent'}`,
+            color: tab === id ? '#fff' : '#6b7280', display: 'flex', alignItems: 'center', gap: '8px',
+            fontSize: '14px', fontWeight: 600, transition: 'all 0.2s', outline: 'none'
           }}>
-            <Icon size={14} /> {label}
-            {badge != null && badge > 0 && (
-              <span style={{ background: '#ef4444', color: '#fff', borderRadius: '10px', fontSize: '9px', fontWeight: 700, padding: '1px 5px', lineHeight: '1.4' }}>{badge}</span>
-            )}
+            <Icon size={16} color={tab === id ? '#38bdf8' : '#6b7280'} />
+            {label}
+            {badge && <span style={{ background: '#ef4444', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '10px' }}>{badge}</span>}
           </button>
         ))}
       </div>
 
-      {tab === 'overview'  && <EnhancedStockTable key={`tbl-${refreshKey}`} data={stockData} />}
+      {tab === 'overview' && <EnhancedStockTable key={`tbl-${refreshKey}`} data={stockData} />}
       {tab === 'movements' && <MovementsPanel key={`mov-${refreshKey}`} />}
       {tab === 'abc'       && <ABCCurve key={`abc-${refreshKey}`} />}
       {tab === 'alerts'    && <StockAlerts key={`alt-${refreshKey}`} />}

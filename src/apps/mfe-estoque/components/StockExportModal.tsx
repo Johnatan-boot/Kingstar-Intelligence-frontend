@@ -32,6 +32,8 @@ export default function StockExportModal({ data, onClose }: Props) {
   const FIELDS: { key: keyof StockRow; label: string }[] = [
     { key: 'sku_id', label: 'SKU' },
     { key: 'description', label: 'Descrição' },
+    { key: 'order_number', label: 'Pedido' },
+    { key: 'nf_number', label: 'NF' },
     { key: 'category', label: 'Categoria' },
     { key: 'quantity_physical', label: 'Qtd. Física' },
     { key: 'quantity_reserved', label: 'Qtd. Reservada' },

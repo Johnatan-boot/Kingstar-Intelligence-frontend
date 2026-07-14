@@ -100,7 +100,7 @@ function ExcelPreviewModal({
           <table className="w-full text-xs text-left">
             <thead className="sticky top-0 bg-[#161616] text-[#8b9dc3] border-y border-[#242424]">
               <tr>
-                {["#", "ID Planilha", "NF", "Fornecedor", "Data", "Itens", "Qtd", "Validação"].map((h) => (
+                {["#", "Nº Pedido", "NF", "Fornecedor", "Data", "Itens", "Qtd", "Validação"].map((h) => (
                   <th key={h} className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px] whitespace-nowrap">
                     {h}
                   </th>
@@ -111,7 +111,7 @@ function ExcelPreviewModal({
               {rows.map((row, i) => (
                 <tr key={i} className={`hover:bg-[#ffffff05] transition-colors ${!row._valido ? 'bg-red-500/5' : ''}`}>
                   <td className="px-4 py-3 font-mono text-gray-500">{i + 1}</td>
-                  <td className="px-4 py-3 font-mono text-gray-400">{row.id_planilha ?? "—"}</td>
+                  <td className="px-4 py-3 font-mono text-gray-400">{row.numero_pedido ?? row.pedido ?? "—"}</td>
                   <td className="px-4 py-3 font-mono text-sky-400">{row.numero_nf ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-300">{row.fornecedor ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{formatarValorTabela(row.previsao_entrega)}</td>
@@ -198,7 +198,7 @@ function lerExcel(file: File): Promise<any[]> {
           });
 
           const r: any = {
-            id_planilha: normalized.id ?? "",
+            numero_pedido: normalized.pedido ?? normalized.numero_pedido ?? "",
             fornecedor: normalized.fornecedor ?? normalized.supplier ?? normalized.fornecedora ?? "",
             numero_nf: normalized.numero_nf ?? normalized.nf ?? normalized.nota_fiscal ?? normalized.nf_number ?? "",
             valor_nf: normalized.valor_nf ?? normalized.valor ?? normalized.nf_value ?? "",
@@ -721,10 +721,11 @@ export function PurchasingMfe() {
               <thead className="bg-[#121212] text-gray-500 border-b border-[#242424]">
                 <tr>
                   <th className="w-12 px-4 py-3"></th>
-                  <th className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Nº Documento / Pedido</th>
+                  <th className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Nº NF</th>
+                  <th className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Nº Pedido</th>
                   <th className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Fornecedor Principal</th>
                   <th className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Data Inclusão</th>
-                  <th className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Volume Itens</th>
+                  <th className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Qtd</th>
                   <th className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Valor Total</th>
                   <th className="px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Estado Atual</th>
                   <th className="w-20 px-4 py-3 font-semibold uppercase tracking-wider text-[11px]">Ações</th>
@@ -742,8 +743,11 @@ export function PurchasingMfe() {
                       </td>
                       <td className="px-4 py-4">
                         <span className="font-mono text-sky-400 font-bold bg-sky-400/10 px-2 py-1 rounded text-xs">
-                          {po.nf_number ?? po.numero_nf ?? po.id?.slice(0, 8)}
+                          {po.nf_number ?? po.numero_nf ?? "—"}
                         </span>
+                      </td>
+                      <td className="px-4 py-4 font-mono font-bold text-gray-300 text-sm">
+                        {po.order_number ?? po.numero_pedido ?? po.pedido ?? po.id?.slice(0, 8) ?? "—"}
                       </td>
                       <td className="px-4 py-4 font-semibold text-gray-200">
                         {po.supplier_name ?? po.fornecedor_nome ?? "—"}
@@ -751,16 +755,19 @@ export function PurchasingMfe() {
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-2 text-gray-400 text-xs font-medium">
                           <Clock size={14} className="text-gray-500" />
-                          {new Date(po.ordered_at ?? po.created_at ?? po.criado_em ?? new Date()).toLocaleDateString("pt-BR")}
+                          {new Date().toLocaleDateString("pt-BR")}
                         </div>
                       </td>
                       <td className="px-4 py-4 text-gray-400">
-                        <span className="font-bold text-gray-300">{(po.items ?? po.itens ?? []).length}</span> unid(s)
+                        <span className="font-bold text-gray-300">
+                          {(po.items ?? po.itens ?? []).reduce((acc: number, item: any) => acc + Number(item.expected_quantity ?? item.quantidade_esperada ?? item.quantidade ?? 1), 0)}
+                        </span> unid(s)
                       </td>
                       <td className="px-4 py-4 font-mono text-emerald-400">
-                        {(po.nf_value ?? po.valor_nf)
-                          ? `R$ ${Number(po.nf_value ?? po.valor_nf).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
-                          : "—"}
+                        {(() => {
+                           const val = po.nf_value ?? po.valor_nf ?? (po.items ?? po.itens ?? []).reduce((acc: number, item: any) => acc + Number(item.unit_cost ?? item.custo_unitario ?? 0) * Number(item.expected_quantity ?? item.quantidade_esperada ?? item.quantidade ?? 1), 0);
+                           return (typeof val === "number" && !isNaN(val)) ? `R$ ${Number(val).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "—";
+                        })()}
                       </td>
                       <td className="px-4 py-4">
                         <Badge status={po.status} />
@@ -786,7 +793,7 @@ export function PurchasingMfe() {
                     {/* Linha Expandida (Itens) */}
                     {expanded[po.id] && (
                       <tr className="bg-[#121212]">
-                        <td colSpan={8} className="p-0 border-t border-[#242424]/50">
+                        <td colSpan={9} className="p-0 border-t border-[#242424]/50">
                           <div className="p-6">
                             <div className="flex items-center gap-2 mb-4">
                                 <div className="w-1 h-4 bg-sky-500 rounded-full"></div>

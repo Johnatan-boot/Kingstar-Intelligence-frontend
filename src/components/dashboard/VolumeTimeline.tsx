@@ -8,7 +8,23 @@ const TIMELINE = Array.from({ length: 14 }, (_, i) => ({
   conferencias: Math.floor(Math.random() * 15) + 3,
 }));
 
+import { analyticsApi } from '../../services/api';
+import { useState, useEffect } from 'react';
+
 export function VolumeTimeline() {
+  const [data, setData] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetch = () => {
+      analyticsApi.dashboard().then(res => {
+        setData(res.data.data.history.map((h: any) => ({ day: new Date(h.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), pedidos: h.total, recebimentos: h.completed, conferencias: Math.floor(h.completed * 0.8) })));
+      });
+    };
+    fetch();
+    const interval = setInterval(fetch, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-6 flex flex-col h-full">
       <div className="mb-6">
@@ -17,7 +33,7 @@ export function VolumeTimeline() {
       </div>
       <div className="flex-1 w-full min-h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={TIMELINE} margin={{ top: 5, right: 10, bottom: 5, left: -20 }}>
+          <LineChart data={data.length > 0 ? data : TIMELINE} margin={{ top: 5, right: 10, bottom: 5, left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#242424" vertical={false} />
             <XAxis 
               dataKey="day" 
