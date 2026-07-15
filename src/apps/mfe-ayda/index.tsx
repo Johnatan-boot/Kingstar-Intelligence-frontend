@@ -65,7 +65,7 @@ export function AydaCoreMfe() {
              </div>
              
              <div className="flex gap-2 items-center text-[10px] uppercase tracking-wider font-mono">
-                <span className="text-[var(--text-muted)] hidden sm:inline">Engine:</span>
+                <span className="text-[var(--text-muted)] hidden sm:inline">Mecanismo:</span>
                 <span className="px-1.5 py-0.5 rounded bg-[var(--color-kingstar-green)]/20 text-[var(--color-kingstar-green)] border border-[var(--color-kingstar-green)]/30">Gemini 3.1 Pro</span>
              </div>
           </div>
@@ -76,7 +76,7 @@ export function AydaCoreMfe() {
                  <div className={`max-w-[80%] rounded-2xl px-5 py-4 ${msg.role === 'user' ? 'bg-[var(--color-kingstar-cyan)]/10 border border-[var(--color-kingstar-cyan)]/20' : 'bg-[var(--color-kingstar-panel)] border border-[var(--border)]'}`}>
                     {msg.provider && msg.role === 'assistant' && (
                       <div className="text-[10px] text-[var(--color-kingstar-cyan)] uppercase font-mono tracking-wider mb-2 font-semibold">
-                        ENGINE: {msg.provider}
+                        MECANISMO: {msg.provider}
                       </div>
                     )}
                     <div className="text-sm leading-relaxed text-gray-200 whitespace-pre-wrap font-sans">

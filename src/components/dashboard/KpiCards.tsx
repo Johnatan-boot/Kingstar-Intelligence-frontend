@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Truck, ClipboardCheck, AlertTriangle, Activity, Zap } from 'lucide-react';
+import { Package, Truck, ClipboardCheck, AlertTriangle, Zap, ShieldAlert } from 'lucide-react';
 import { analyticsApi } from '../../services/api';
 
 export function KpiCards() {
@@ -9,7 +9,10 @@ export function KpiCards() {
     try {
       const res = await analyticsApi.dashboard();
       setData(res.data.data);
-    } catch(e) {}
+    } catch (e) {
+      // Mantém o último valor conhecido em tela em vez de zerar tudo
+      // por causa de uma falha pontual de rede.
+    }
   };
 
   useEffect(() => {
@@ -18,20 +21,23 @@ export function KpiCards() {
     return () => clearInterval(interval);
   }, []);
 
+  const scoreTotal = data?.score?.total ?? 0;
+  const scoreClass = data?.score?.classification ?? 'Aguardando dados';
+
   const kpis = [
-    { label: 'Score Operacional', value: data?.score?.total || '87.4', sub: '+2.1 vs ontem',  color: '#38bdf8', icon: Zap,           up: true  },
-    { label: 'Pedidos Pendentes', value: data?.kpis?.pending_pos || '0',   sub: 'aguardando',     color: '#facc15', icon: Package,       up: false },
-    { label: 'Recebimentos Hoje', value: data?.metrics?.totalVehiclesReceived || '0',    sub: 'em andamento',  color: '#22c55e', icon: Truck,         up: true  },
-    { label: 'Conferências',      value: data?.kpis?.completed_conferences_today || '0',   sub: 'conferidos hoje',color: '#8b5cf6', icon: ClipboardCheck,up: true  },
-    { label: 'Estoque Crítico',   value: '7',    sub: 'requerem ação',   color: '#ef4444', icon: AlertTriangle, up: false },
-    { label: 'Taxa de Acerto',    value: '96.2%',sub: 'conferências',    color: '#0ea5e9', icon: Activity,      up: true  },
+    { label: 'Score Operacional', value: scoreTotal, sub: scoreClass, color: '#38bdf8', icon: Zap, up: scoreTotal >= 75 },
+    { label: 'Pedidos Pendentes', value: data?.kpis?.pending_pos ?? 0, sub: 'aguardando recebimento', color: '#facc15', icon: Package, up: false },
+    { label: 'Recebimentos Hoje', value: data?.kpis?.receiving_pos ?? 0, sub: 'carros/caminhões hoje', color: '#22c55e', icon: Truck, up: true },
+    { label: 'Conferências Hoje', value: data?.kpis?.completed_conferences_today ?? 0, sub: 'NFs conferidas hoje', color: '#8b5cf6', icon: ClipboardCheck, up: true },
+    { label: 'Avarias', value: data?.metrics?.totalDamages ?? 0, sub: 'registradas hoje', color: '#ef4444', icon: AlertTriangle, up: false },
+    { label: 'Divergências', value: data?.metrics?.totalDivergences ?? 0, sub: 'em análise PCL hoje', color: '#f97316', icon: ShieldAlert, up: false },
   ];
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
       {kpis.map((kpi, i) => (
-        <div 
-          key={kpi.label} 
+        <div
+          key={kpi.label}
           className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 flex flex-col gap-4 relative overflow-hidden group hover:border-[#38bdf8]/50 transition-colors duration-300"
           style={{ animationDelay: `${i * 60}ms` }}
         >
@@ -42,8 +48,8 @@ export function KpiCards() {
             <h3 className="text-[10px] text-[var(--text-secondary)] uppercase tracking-widest font-bold max-w-[80%] leading-tight">
               {kpi.label}
             </h3>
-            <div 
-              className="p-1.5 rounded-lg flex items-center justify-center shrink-0" 
+            <div
+              className="p-1.5 rounded-lg flex items-center justify-center shrink-0"
               style={{ backgroundColor: `${kpi.color}15` }}
             >
               <kpi.icon size={16} color={kpi.color} />

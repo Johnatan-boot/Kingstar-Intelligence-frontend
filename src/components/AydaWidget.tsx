@@ -22,6 +22,16 @@ export default function AydaWidget() {
   const [botStatus, setBotStatus] = useState<any>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
+  // Em telas pequenas, o widget vira um painel de tela cheia em vez de um
+  // pop-up flutuante de tamanho fixo (que estouraria a largura do celular).
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const checar = () => setIsMobile(window.innerWidth < 640);
+    checar();
+    window.addEventListener('resize', checar);
+    return () => window.removeEventListener('resize', checar);
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -68,7 +78,14 @@ export default function AydaWidget() {
   };
 
   return (
-    <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 9999 }}>
+    <div style={{
+      position: 'fixed',
+      bottom: isMobile && isOpen ? 0 : 20,
+      right: isMobile && isOpen ? 0 : 20,
+      left: isMobile && isOpen ? 0 : 'auto',
+      top: isMobile && isOpen ? 0 : 'auto',
+      zIndex: 9999,
+    }}>
       {/* Widget Button */}
       {!isOpen && (
         <button
@@ -91,8 +108,11 @@ export default function AydaWidget() {
       {/* Chat Popover */}
       {isOpen && (
         <div style={{
-          width: 380, height: 600, background: '#161616',
-          border: '1px solid #242424', borderRadius: 16,
+          width: isMobile ? '100vw' : 380,
+          height: isMobile ? '100dvh' : 600,
+          background: '#161616',
+          border: isMobile ? 'none' : '1px solid #242424',
+          borderRadius: isMobile ? 0 : 16,
           boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden', animation: 'scaleIn 0.2s ease-out'
@@ -108,7 +128,7 @@ export default function AydaWidget() {
                   Ayda <span style={{ fontSize: 9, background: '#38bdf820', color: '#38bdf8', padding: '2px 6px', borderRadius: 10, fontWeight: 700 }}>IA</span>
                 </h1>
                 <p style={{ fontSize: 11, color: '#8b9dc3', margin: 0, marginTop: 2 }}>
-                  {botStatus ? 'Online' : 'Conectando...'}
+                  {botStatus ? 'Conectado' : 'Conectando...'}
                 </p>
               </div>
             </div>

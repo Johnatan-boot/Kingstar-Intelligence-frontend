@@ -1,214 +1,222 @@
-let mockPos: any[] = [
-  { 
-    id: '1', 
-    nf_number: '12345', 
-    supplier_name: 'Fornecedor Premium SA', 
-    status: 'PENDING', 
-    created_at: new Date().toISOString(), 
-    ordered_at: new Date().toISOString(),
-    nf_value: 5000,
-    items: [
-      { sku_id: 'COL-ORTO-001', description: 'Colchão Ortopédico Casal', expected_quantity: 10, unit_cost: 450.0 }
-    ] 
-  }
-];
+// src/services/api.ts
+//
+// Camada de integração com o backend real (Fastify + MySQL). Antes,
+// todo este arquivo trabalhava em cima de arrays em memória (mock);
+// agora cada função chama o endpoint correspondente da API e adapta a
+// resposta para o mesmo formato que as telas já esperavam, para não
+// precisar reescrever cada componente que consome esses dados.
+//
+// Módulos sem endpoint real no backend (fornecedores/skus "catálogo" e
+// agendamentos) continuam com dados de apoio (mock) — estão marcados
+// abaixo com um comentário "SEM BACKEND".
+import { http } from './httpClient';
 
-let mockReceivings: any[] = [
-  { id: 'mock-rec-1', start_time: new Date().toISOString(), supplier_name: 'Fornecedor Premium SA', nf_number: '12345', license_plate: 'ABC-1234', vehicle_type: 'TRUCK', status: 'IN_PROGRESS', po_status: 'RECEIVING', purchase_order_id: '1' }
-];
+// ── Compras (Pedidos) ──────────────────────────────────────────────
+function mapPedido(p: any) {
+  return {
+    id: p.id,
+    nf_number: p.numeroNf ?? '',
+    supplier_name: p.fornecedorNome ?? '',
+    status: p.status,
+    created_at: p.dataPedido,
+    ordered_at: p.dataPedido,
+    nf_value: p.nfValue ?? null,
+    items: (p.itens ?? []).map((i: any) => ({
+      sku_id: i.sku,
+      description: i.descricao,
+      expected_quantity: i.quantidadeEsperada,
+      unit_cost: i.unitCost ?? 0,
+    })),
+  };
+}
 
 export const purchasesApi = {
   list: async (params?: any) => {
-    let list = mockPos;
-    if (params?.status) {
-      list = list.filter(p => p.status === params.status);
-    }
-    return { data: { dados: list } };
+    const res = await http.get('/compras', { params });
+    return { data: { dados: (res.data.data ?? []).map(mapPedido) } };
   },
-  suppliers: async () => ({ data: { dados: [{id: '1', nome_fantasia: 'Fornecedor Premium SA'}, {id: '2', nome_fantasia: 'Distribuidora ABC'}] } }),
-  skus: async () => ({ data: { dados: [{id: '1', codigo: 'COL-ORTO-001', descricao: 'Colchão Ortopédico Casal'}, {id: '2', codigo: 'TRV-MEM-002', descricao: 'Travesseiro Memory Foam'}] } }),
+  // SEM BACKEND: não existe catálogo de fornecedores dedicado — o campo
+  // fornecedor é texto livre em pedidos_compra. Mantido como apoio de UI.
+  suppliers: async () => ({ data: { dados: [{ id: '1', nome_fantasia: 'Fornecedor Premium SA' }, { id: '2', nome_fantasia: 'Distribuidora ABC' }] } }),
+  // SEM BACKEND: idem para catálogo de SKUs de compra.
+  skus: async () => ({ data: { dados: [{ id: '1', codigo: 'COL-ORTO-001', descricao: 'Colchão Ortopédico Casal' }, { id: '2', codigo: 'TRV-MEM-002', descricao: 'Travesseiro Memory Foam' }] } }),
   create: async (data: any) => {
-    const newId = String(Date.now());
-    mockPos.push({
-      id: newId,
-      nf_number: data.nfNumber,
-      supplier_name: data.supplierName || 'Fornecedor Novo',
-      status: 'PENDING',
-      created_at: new Date().toISOString(),
-      ordered_at: data.expectedAt || new Date().toISOString(),
-      nf_value: data.nfValue,
-      items: data.items.map((i: any) => ({
-        sku_id: i.skuId,
-        description: i.description,
-        expected_quantity: i.expectedQuantity,
-        unit_cost: i.unitCost
-      }))
-    });
-    
-    // Auto-create receiving to sync pending POs with receiving cars
-    mockReceivings.push({
-      id: `rec-${newId}`,
-      purchase_order_id: newId,
-      supplier_name: data.supplierName || 'Fornecedor Novo',
-      nf_number: data.nfNumber,
-      license_plate: 'ABC-1234',
-      vehicle_type: 'TRUCK',
-      driver_name: 'Motorista Mock',
-      dock: 'Doca 1',
-      start_time: new Date().toISOString(),
-      status: 'IN_PROGRESS',
-      po_status: 'RECEIVING'
-    });
-
-    return { data: { message: 'Criado com sucesso' } };
+    const body = {
+      fornecedorNome: data.supplierName || 'Fornecedor Novo',
+      fornecedorId: data.supplierId || 'SEM_CODIGO',
+      numeroNf: data.nfNumber,
+      observacoes: data.observacoes,
+      itens: (data.items ?? []).map((i: any) => ({
+        sku: i.skuId,
+        descricao: i.description,
+        quantidadeEsperada: i.expectedQuantity,
+      })),
+    };
+    const res = await http.post('/compras', body);
+    return { data: { message: 'Criado com sucesso', id: res.data.data?.id } };
   },
-  cancel: async (id: string, reason: string) => {
-    const po = mockPos.find(p => p.id === id);
-    if (po) po.status = 'CANCELLED';
-    return { data: { message: 'Cancelado' } };
-  }
+  // Importação real da planilha XLSX (POST /compras/importar, multipart)
+  importar: async (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await http.post('/compras/importar', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  cancel: async (id: string, _reason?: string) => {
+    const res = await http.patch(`/compras/${id}/cancelar`);
+    return { data: { message: res.data.message ?? 'Cancelado' } };
+  },
 };
+
+// ── Recebimento ─────────────────────────────────────────────────────
+function mapRecebimento(r: any) {
+  return {
+    id: r.id,
+    purchase_order_id: r.pedidoCompraId,
+    supplier_name: r.fornecedorNome ?? '',
+    nf_number: r.numeroNf ?? '',
+    license_plate: r.placaVeiculo ?? '',
+    vehicle_type: r.tipoVeiculo,
+    driver_name: r.nomeMotorista ?? '',
+    dock: r.doca ?? '',
+    start_time: r.horaInicio,
+    end_time: r.horaFim,
+    status: r.status,
+    po_status: r.status === 'COMPLETED' ? 'CONFERENCE' : 'RECEIVING',
+  };
+}
 
 export const receivingApi = {
-  list: async () => ({ data: { dados: mockReceivings } }),
+  list: async (params?: any) => {
+    const res = await http.get('/recebimento', { params });
+    return { data: { dados: (res.data.data ?? []).map(mapRecebimento) } };
+  },
   start: async (data: any) => {
-    const newId = String(Date.now());
-    mockReceivings.push({
-      id: newId,
-      purchase_order_id: data.purchaseOrderId,
-      supplier_name: data.supplierName,
-      nf_number: data.nfNumber,
-      license_plate: data.licensePlate,
-      vehicle_type: data.vehicleType,
-      driver_name: data.driverName,
-      dock: data.dock,
-      start_time: new Date().toISOString(),
-      status: 'IN_PROGRESS',
-      po_status: 'RECEIVING'
-    });
-    return { data: { message: 'Recebimento criado' } };
-  }
+    const body = {
+      pedidoCompraId: data.purchaseOrderId,
+      placaVeiculo: data.licensePlate,
+      tipoVeiculo: data.vehicleType || 'TRUCK',
+      nomeMotorista: data.driverName,
+      doca: data.dock,
+      numeroNf: data.nfNumber,
+      fornecedorNome: data.supplierName,
+      observacoes: data.observacoes,
+    };
+    const res = await http.post('/recebimento', body);
+    return { data: { message: 'Recebimento criado', id: res.data.data?.id } };
+  },
+  // Necessário chamar antes de iniciar a conferência (o backend só cria
+  // conferência para recebimentos já finalizados).
+  finish: async (id: string) => {
+    const res = await http.patch(`/recebimento/${id}/finalizar`);
+    return { data: { message: res.data.message ?? 'Recebimento finalizado' } };
+  },
 };
 
-let mockConferences: any[] = [
-  { id: 'mock-conf-1', nf_number: '001', purchase_order_id: 'po1', supplier_name: 'Fornecedor Premium SA', total_pieces: 100, attempts: 0, status: 'PENDING' }
-];
-
-let mockPclDivergences: any[] = [
-  { id: 'mock-pcl-1', nf_number: '001', supplier_name: 'Fornecedor A', error_type: 'DIVERGENCIA_CONTAGEM', total_pieces: 100, checked_pieces: 95, damages: 0, attempts: 3, status: 'IN_ANALYSIS' }
-];
+// ── Conferência ──────────────────────────────────────────────────────
+function mapConferencia(c: any) {
+  return {
+    id: c.id,
+    recebimento_id: c.recebimentoId,
+    purchase_order_id: c.pedidoCompraId,
+    total_pieces: c.totalPecas,
+    checked_pieces: c.pecasConferidas,
+    damages: c.avarias,
+    attempts: c.tentativas,
+    status: c.status === 'PCL_ANALYSIS' ? 'PCL_ANALYSIS' : c.status,
+  };
+}
 
 export const conferenceApi = {
-  list: async () => ({ data: { dados: mockConferences } }),
+  list: async (params?: any) => {
+    const res = await http.get('/conferencia', params ? { params } : undefined);
+    return { data: { dados: (res.data.data ?? []).map(mapConferencia) } };
+  },
   start: async (data: any) => {
-    const newConf = {
-      id: String(Date.now()),
-      nf_number: data.nfNumber,
-      purchase_order_id: data.purchaseOrderId,
-      supplier_name: data.supplierName,
-      total_pieces: data.totalPieces,
-      vehicle_type: data.vehicleType,
-      license_plate: data.licensePlate,
-      attempts: 0,
-      status: 'PENDING'
+    const body = {
+      recebimentoId: data.receivingId,
+      pedidoCompraId: data.purchaseOrderId,
+      totalPecas: data.totalPieces,
     };
-    mockConferences.push(newConf);
-    
-    // Update receiving status
-    if (data.receivingId) {
-       const rec = mockReceivings.find(r => r.id === data.receivingId);
-       if (rec) {
-         rec.po_status = 'CONFERENCE';
-         rec.status = 'COMPLETED'; // If receiving is done
-       }
-    }
-    // Update PO status
-    if (data.purchaseOrderId) {
-       const po = mockPos.find(p => p.id === data.purchaseOrderId);
-       if (po) po.status = 'CONFERENCE';
-    }
-
-    return { data: { message: 'Conferência iniciada', conference: newConf } };
+    const res = await http.post('/conferencia', body);
+    return { data: { message: 'Conferência iniciada', conference: mapConferencia(res.data.data) } };
   },
   submit: async (id: string, data: any) => {
-    const conf = mockConferences.find(c => c.id === id);
-    if (!conf) throw new Error('Not found');
-    
-    conf.attempts = (conf.attempts || 0) + 1;
-    conf.checked_pieces = data.checkedPieces;
-    conf.damages = data.damages;
-    conf.has_damages = data.damageType === 'AVARIA';
-
-    if (data.checkedPieces !== conf.total_pieces) {
-      if (conf.attempts >= 3) {
-        conf.status = 'PCL_ANALYSIS';
-        mockPclDivergences.push({
-          id: `pcl-${conf.id}`,
-          nf_number: conf.nf_number,
-          purchase_order_id: conf.purchase_order_id,
-          supplier_name: conf.supplier_name,
-          error_type: data.damageType === 'AVARIA' ? 'AVARIA_MERCADORIA' : 'DIVERGENCIA_CONTAGEM',
-          total_pieces: conf.total_pieces,
-          checked_pieces: data.checkedPieces,
-          damages: data.damages,
-          attempts: conf.attempts,
-          status: 'IN_ANALYSIS'
-        });
-      } else {
-        conf.status = 'IN_PROGRESS';
-      }
-    } else {
-      conf.status = 'APPROVED';
-      const po = mockPos.find(p => p.id === conf.purchase_order_id);
-      if (po) po.status = 'COMPLETED';
-    }
-    
-    return { data: { status: conf.status } };
-  }
+    const body = {
+      pecasConferidas: data.checkedPieces,
+      avarias: data.damages ?? 0,
+      observacoes: data.damageType,
+    };
+    const res = await http.patch(`/conferencia/${id}/submeter`, body);
+    return { data: { status: res.data.data?.status } };
+  },
 };
+
+// ── PCL (divergências) ───────────────────────────────────────────────
+function mapDivergencia(d: any) {
+  return {
+    id: d.id,
+    purchase_order_id: d.pedidoCompraId,
+    total_pieces: d.totalPecas,
+    checked_pieces: d.pecasConferidas,
+    damages: d.avarias,
+    attempts: d.tentativas,
+    error_type: d.avarias > 0 ? 'AVARIA_MERCADORIA' : 'DIVERGENCIA_CONTAGEM',
+    status: 'IN_ANALYSIS',
+  };
+}
 
 export const pclApi = {
-  list: async (params?: any) => {
-    let list = mockPclDivergences;
-    if (params?.status) {
-      if (params.status === 'IN_ANALYSIS') { 
-        list = list.filter(p => p.status === 'IN_ANALYSIS');
-      } else { 
-        list = list.filter(p => p.status === params.status);
-      }
-    }
-    return { data: { dados: list } };
+  list: async (_params?: any) => {
+    const res = await http.get('/conferencia/pcl/divergencias');
+    return { data: { dados: (res.data.data ?? []).map(mapDivergencia) } };
   },
-  analyze: async (id: string, data: { approved: boolean, notes: string }) => {
-    const div = mockPclDivergences.find(d => d.id === id);
-    if (div) {
-      div.status = data.approved ? 'APPROVED' : 'REJECTED';
-      div.notes = data.notes;
-    }
-    return { data: { message: 'Análise registrada' } };
-  }
+  analyze: async (id: string, data: { approved: boolean; notes: string }) => {
+    const res = await http.patch(`/conferencia/pcl/${id}/analisar`, {
+      decisao: data.approved ? 'APPROVE' : 'REJECT',
+      justificativa: data.notes,
+    });
+    return { data: { message: res.data.message ?? 'Análise registrada' } };
+  },
 };
 
+// ── Estoque ───────────────────────────────────────────────────────────
 export const stockApi = {
-  dashboard: async () => ({
-    data: { totalSkus: 142, totalPieces: 38420, availableStock: 35100, criticalItems: 7, totalValue: 1240000 }
-  }),
-  abc: async () => ({
-    data: [] // mock is generated inside component if empty
-  }),
+  dashboard: async () => {
+    const res = await http.get('/estoque/dashboard');
+    const d = res.data.data;
+    return {
+      data: {
+        totalSkus: d.totalSkus,
+        totalPieces: d.totalPecas,
+        availableStock: d.totalPecas,
+        criticalItems: d.totalCriticos + d.totalRupturas,
+        totalValue: d.valorTotal,
+      },
+    };
+  },
+  abc: async () => {
+    const res = await http.get('/estoque/curva-abc');
+    return { data: res.data.data ?? [] };
+  },
   move: async (data: any) => {
-    return { data: { movementId: 'MV-' + Date.now() } };
-  }
+    const res = await http.post('/estoque/movimentar', data);
+    return { data: { message: res.data.message } };
+  },
 };
 
+// ── Agendamentos ────────────────────────────────────────────────────
+// SEM BACKEND: a tabela `agendamentos` existe no banco, mas este pacote
+// do backend ainda não expõe um módulo/rotas para ela. Mantido como
+// mock até que esse módulo seja implementado no servidor.
 let mockSchedules: any[] = [
-  { id: '1', supplier_name: 'Fornecedor Premium SA', nf_number: '1234', expected_at: new Date().toISOString(), status: 'SCHEDULED' }
+  { id: '1', supplier_name: 'Fornecedor Premium SA', nf_number: '1234', expected_at: new Date().toISOString(), status: 'SCHEDULED' },
 ];
 
 export const scheduleApi = {
-  list: async () => {
-    return { data: { dados: mockSchedules } };
-  },
+  list: async () => ({ data: { dados: mockSchedules } }),
   create: async (data: any) => {
     mockSchedules.push({
       id: String(Date.now()),
@@ -216,9 +224,9 @@ export const scheduleApi = {
       nf_number: data.nfNumber,
       expected_at: data.expectedAt,
       notes: data.notes,
-      status: 'SCHEDULED'
+      status: 'SCHEDULED',
     });
-    return { data: { message: 'Agendamento criado' } };
+    return { data: { message: 'Agendamento criado (modo local — módulo de agendamentos ainda não existe no backend)' } };
   },
   arrive: async (id: string) => {
     const s = mockSchedules.find(x => x.id === id);
@@ -229,83 +237,91 @@ export const scheduleApi = {
     const s = mockSchedules.find(x => x.id === id);
     if (s) s.status = 'CANCELLED';
     return { data: { message: 'Cancelado' } };
-  }
+  },
 };
 
+// ── Analytics (AYDA Core + Analytics) ────────────────────────────────
+// 100% real e em tempo real: os componentes fazem polling a cada 5s
+// em cima destes endpoints, então basta devolver a resposta do axios
+// tal como está — `res.data` já é `{ success, data }` no formato que
+// os componentes (KpiCards, VolumeTimeline, StatusPie, AnalyticsMfe)
+// já esperavam (`res.data.data`).
 export const analyticsApi = {
-  dashboard: async () => {
-    // Simulate delay
-    await new Promise(r => setTimeout(r, 800));
-    
-    // Dynamic calculation
-    const totalCompleted = mockPos.filter(p => p.status === 'COMPLETED').length;
-    const totalPending = mockPos.filter(p => p.status === 'PENDING').length;
-    const totalCancelled = mockPos.filter(p => p.status === 'CANCELLED').length;
-    const totalReceiving = mockReceivings.filter(r => r.status === 'IN_PROGRESS').length;
-    const totalConferences = mockConferences.length;
-    
-    const completedConferencesToday = mockConferences.filter(c => c.status === 'APPROVED').length;
-    // O número de pedidos pendentes sempre será igual ao número de veículos em recebimento na interface
-    const pedidosPendentesReal = mockReceivings.length;
-
-    return {
-      data: {
-        data: {
-          metrics: {
-            totalCompletedNFs: totalCompleted,
-            totalVehiclesReceived: mockReceivings.length,
-            totalPiecesChecked: 15420,
-            errorRate: 1.2,
-            totalDamages: 8,
-            totalDivergences: 12,
-            avgReceivingMin: 45,
-            avgConferenceMin: 82
-          },
-          score: {
-            total: 92,
-            classification: 'Excelente'
-          },
-          history: Array.from({ length: 14 }).map((_, i) => ({
-            date: new Date(Date.now() - (13 - i) * 86400000).toISOString(),
-            total: Math.floor(Math.random() * 50) + 10,
-            completed: Math.floor(Math.random() * 40) + 10
-          })),
-          supplierScores: [
-            { supplier: 'Fornecedor Premium SA', score: 98, totalDeliveries: 45, divergences: 0, avgDeliveryTime: 32 },
-            { supplier: 'Distribuidora ABC', score: 85, totalDeliveries: 22, divergences: 3, avgDeliveryTime: 45 },
-            { supplier: 'Industria XPTO', score: 65, totalDeliveries: 12, divergences: 5, avgDeliveryTime: 120 }
-          ],
-          kpis: {
-            completed_pos: totalCompleted,
-            conference_pos: totalConferences,
-            receiving_pos: totalReceiving,
-            pending_pos: pedidosPendentesReal,
-            cancelled_pos: totalCancelled,
-            completed_conferences_today: completedConferencesToday
-          }
-        }
-      }
-    };
-  }
+  dashboard: async () => http.get('/analytics/dashboard'),
+  volumeTimeline: async (dias = 14) => http.get('/analytics/volume-timeline', { params: { dias } }),
+  registrarSnapshot: async (tipo: 'ALMOCO' | 'FECHAMENTO') => http.post('/analytics/snapshot', { tipo }),
 };
 
+// ── Usuários (Configurações → CRUD de usuários) ──────────────────────
+// Restrito a perfis ADMIN/SUPER_ADMIN no backend.
+function mapUsuario(u: any) {
+  return {
+    id: u.id,
+    name: u.nome,
+    email: u.email,
+    dept: u.departamento || '—',
+    role: u.funcao,
+    status: u.ativo ? 'Ativo' : 'Inativo',
+    lastLogin: u.ultimo_login,
+  };
+}
+
+export const usuariosApi = {
+  list: async (params?: { search?: string }) => {
+    const res = await http.get('/usuarios', { params });
+    return { data: { dados: (res.data.data ?? []).map(mapUsuario) } };
+  },
+  create: async (data: { name: string; email: string; password: string; role: string; dept: string }) => {
+    const res = await http.post('/usuarios', {
+      nome: data.name,
+      email: data.email,
+      senha: data.password,
+      funcao: data.role,
+      departamento: data.dept,
+    });
+    return { data: { message: res.data.message, usuario: mapUsuario(res.data.data) } };
+  },
+  update: async (id: string, data: Partial<{ name: string; email: string; password: string; role: string; dept: string; active: boolean }>) => {
+    const body: any = {};
+    if (data.name !== undefined) body.nome = data.name;
+    if (data.email !== undefined) body.email = data.email;
+    if (data.password) body.senha = data.password;
+    if (data.role !== undefined) body.funcao = data.role;
+    if (data.dept !== undefined) body.departamento = data.dept;
+    if (data.active !== undefined) body.ativo = data.active;
+    const res = await http.patch(`/usuarios/${id}`, body);
+    return { data: { message: res.data.message, usuario: mapUsuario(res.data.data) } };
+  },
+  // Desativa o usuário (soft delete no backend — preserva o histórico).
+  remove: async (id: string) => {
+    const res = await http.delete(`/usuarios/${id}`);
+    return { data: { message: res.data.message } };
+  },
+};
+
+// ── AYDA (chat) ───────────────────────────────────────────────────────
+// O backend expõe /chat publicamente (orquestra o serviço Python
+// LangGraph). Se o serviço Python não estiver no ar, devolvemos uma
+// mensagem de erro amigável em vez de travar a UI.
 export const aydaApi = {
-  status: async () => ({ data: { dados: true } }),
-  chat: async (message: string, history: any[]) => {
-    // Generate a contextual mock response
-    let resposta = "Entendi. Como posso ajudar mais com as operações da Kingstar?";
-    const msgLower = message.toLowerCase();
-    
-    if (msgLower.includes("critico") || msgLower.includes("crítico")) {
-      resposta = "Atualmente temos **7 itens** em estoque crítico, a maioria na categoria de colchoes. Posso gerar um relatório detalhado se quiser.";
-    } else if (msgLower.includes("pedido")) {
-      resposta = "Para criar um pedido, você precisa ir na tela de **Compras / PCL**, clicar em 'Novo Pedido' e preencher o formulário. Posso te guiar passo a passo.";
-    } else if (msgLower.includes("atrasad") || msgLower.includes("atraso")) {
-      resposta = "No momento há **2 contêineres** atrasados aguardando recebimento na doca norte. Eles já foram sinalizados para o PCL.";
+  status: async () => {
+    try {
+      const res = await http.get('/chat/status');
+      return { data: { dados: !!res.data?.data } };
+    } catch {
+      return { data: { dados: false } };
     }
-    
-    // Simulate delay
-    await new Promise(r => setTimeout(r, 1000));
+  },
+  chat: async (message: string, history: any[]) => {
+    const body = {
+      pergunta: message,
+      historico: (history ?? []).map((h: any) => ({
+        papel: h.role === 'user' ? 'user' : 'assistant',
+        conteudo: h.text ?? h.conteudo ?? '',
+      })),
+    };
+    const res = await http.post('/chat', body);
+    const resposta = res.data?.data?.resposta ?? res.data?.data?.text ?? '';
     return { data: { dados: { resposta } } };
-  }
+  },
 };

@@ -27,8 +27,8 @@ export const ShellProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Baseando permissões no role do user (RF-005: Controle de permissões por perfil)
   const getPermissions = () => {
     if (!user) return [];
-    if (user.role === 'SYSTEM_ADMIN') return ['VIEW_INVENTORY', 'MANAGE_PURCHASES', 'SYSTEM_ADMIN', 'MANAGE_USERS'];
-    if (user.role === 'GESTOR') return ['VIEW_INVENTORY', 'MANAGE_PURCHASES'];
+    if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') return ['VIEW_INVENTORY', 'MANAGE_PURCHASES', 'SYSTEM_ADMIN', 'MANAGE_USERS'];
+    if (user.role === 'GESTOR' || user.role === 'COMPRAS' || user.role === 'PCL' || user.role === 'ANALITICA') return ['VIEW_INVENTORY', 'MANAGE_PURCHASES'];
     return ['VIEW_INVENTORY'];
   };
   
