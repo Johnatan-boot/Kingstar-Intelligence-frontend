@@ -15,6 +15,8 @@ interface StockRow {
   location_code?: string;
   zone?: string;
   last_movement_at?: string;
+  order_number?: string;
+  nf_number?: string;
 }
 
 interface Props {

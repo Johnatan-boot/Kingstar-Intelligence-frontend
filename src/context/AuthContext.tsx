@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import toast from 'react-hot-toast';
 import { http } from '../services/httpClient';
 
 export interface UserProfile {
@@ -65,6 +66,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('kg_user_session');
     localStorage.removeItem('kg_user_profile');
   };
+
+  // Reage à expiração/invalidação do token (detectada pelo interceptor
+  // de resposta 401 em httpClient.ts): sem isto, a UI continuava se
+  // achando autenticada mesmo com a sessão local já limpa.
+  useEffect(() => {
+    const aoExpirarSessao = () => {
+      setIsAuthenticated(false);
+      setUser(null);
+      toast.error('Sua sessão expirou. Faça login novamente.');
+    };
+    window.addEventListener('kg:sessao-expirada', aoExpirarSessao);
+    return () => window.removeEventListener('kg:sessao-expirada', aoExpirarSessao);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, user, login, register, logout }}>

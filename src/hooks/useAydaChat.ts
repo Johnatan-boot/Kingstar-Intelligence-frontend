@@ -9,7 +9,7 @@
 import { useCallback, useRef, useState } from 'react';
 
 export const API_BASE_URL =
-  (import.meta as any).env?.VITE_API_URL || 'http://localhost:3333';
+  (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000';
 
 export type AydaStepStatus = 'rodando' | 'concluida' | 'erro';
 
@@ -187,7 +187,7 @@ export function useAydaChat(contexto?: { user_id?: string; nome?: string; funcao
         if (err?.name !== 'AbortError') {
           patchAssistant({
             content:
-              'Não consegui falar com o backend/serviço de automação agora. Confirme que o backend (porta 3333) e o web-automate (porta 8000) estão rodando.',
+              'Não consegui falar com o backend/serviço de automação agora. Confirme que o backend (porta 3000) e o web-automate (porta 8000) estão rodando.',
             isStreaming: false,
           });
         }

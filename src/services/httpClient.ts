@@ -17,14 +17,20 @@ http.interceptors.request.use((config) => {
 });
 
 // Se o token expirar/for inválido, limpa a sessão local para forçar
-// um novo login (evita ficar preso com um token morto).
+// um novo login (evita ficar preso com um token morto) e avisa o
+// resto da aplicação via evento, já que este módulo não tem acesso
+// direto ao estado React do AuthContext.
 http.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err?.response?.status === 401) {
+      const tinhaSessao = !!localStorage.getItem('kg_token');
       localStorage.removeItem('kg_token');
       localStorage.removeItem('kg_user_profile');
       localStorage.removeItem('kg_user_session');
+      if (tinhaSessao) {
+        window.dispatchEvent(new CustomEvent('kg:sessao-expirada'));
+      }
     }
     return Promise.reject(err);
   }
