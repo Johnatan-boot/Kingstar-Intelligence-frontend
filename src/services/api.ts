@@ -183,6 +183,34 @@ export const pclApi = {
 };
 
 // ── Estoque ───────────────────────────────────────────────────────────
+function mapSaldoEstoque(s: any) {
+  return {
+    sku_id: s.sku,
+    description: s.descricao,
+    category: s.categoria ?? 'Geral',
+    quantity_physical: Number(s.quantidadeFisica ?? 0),
+    quantity_reserved: Number(s.quantidadeReservada ?? 0),
+    quantity_available: Number(s.quantidadeDisponivel ?? 0),
+    average_cost: Number(s.custoMedio ?? 0),
+    total_value: Number(s.valorTotal ?? 0),
+    status: s.status,
+    location_code: s.localizacao ?? undefined,
+    zone: s.zona ?? undefined,
+    last_movement_at: s.ultimaMovimentacao ?? undefined,
+  };
+}
+
+function mapMovimentacaoEstoque(m: any) {
+  return {
+    id: m.id,
+    movement_type: m.tipo,
+    sku_id: m.sku,
+    quantity: Number(m.quantidade ?? 0),
+    reference_type: m.referenciaId ?? m.motivo ?? '',
+    occurred_at: m.criadoEm,
+  };
+}
+
 export const stockApi = {
   dashboard: async () => {
     const res = await http.get('/estoque/dashboard');
@@ -201,8 +229,53 @@ export const stockApi = {
     const res = await http.get('/estoque/curva-abc');
     return { data: res.data.data ?? [] };
   },
-  move: async (data: any) => {
-    const res = await http.post('/estoque/movimentar', data);
+  // GET /estoque/saldos — posição real de estoque por SKU (paginado)
+  saldos: async (params?: { page?: number; limit?: number; search?: string; status?: string; zona?: string }) => {
+    const res = await http.get('/estoque/saldos', { params });
+    const body = res.data;
+    return { data: { dados: (body.data ?? []).map(mapSaldoEstoque), total: body.total, page: body.page, totalPages: body.totalPages } };
+  },
+  // GET /estoque/alertas — SKUs em CRITICO/RUPTURA/ATENCAO
+  alertas: async () => {
+    const res = await http.get('/estoque/alertas');
+    return { data: { dados: (res.data.data ?? []).map((a: any) => ({ sku_id: a.sku, description: a.descricao, status: a.status, quantity: Number(a.quantidade ?? 0), average_cost: Number(a.custoMedio ?? 0) })) } };
+  },
+  // GET /estoque/localizacoes — endereços cadastrados de fato no banco
+  localizacoes: async () => {
+    const res = await http.get('/estoque/localizacoes');
+    return { data: { dados: res.data.data ?? [] } };
+  },
+  // GET /estoque/movimentacoes — histórico real (substitui o mock anterior)
+  movimentacoes: async (params?: { page?: number; limit?: number; sku?: string }) => {
+    const res = await http.get('/estoque/movimentacoes', { params });
+    const body = res.data;
+    return { data: { dados: (body.data ?? []).map(mapMovimentacaoEstoque), total: body.total, page: body.page, totalPages: body.totalPages } };
+  },
+  // POST /estoque/movimentar — registra entrada/saída/reserva/etc.
+  // IMPORTANTE: os nomes de campo aqui têm que bater com movimentarEstoqueSchema
+  // no backend (sku, tipo, quantidade, motivo, referenciaId) — o bug anterior
+  // mandava {type, skuId, locationId, quantity, unitCost, reason} sem tradução
+  // nenhuma, e toda movimentação falhava com 400.
+  move: async (data: { type: string; skuId: string; quantity: number; reason?: string; referenceId?: string; description?: string }) => {
+    const body = {
+      sku: data.skuId,
+      descricao: data.description,
+      tipo: data.type,
+      quantidade: data.quantity,
+      motivo: data.reason,
+      referenciaId: data.referenceId,
+    };
+    const res = await http.post('/estoque/movimentar', body);
+    return { data: { message: res.data.message } };
+  },
+  // POST /estoque/ajuste-lote — usado pela importação de planilha de estoque
+  ajusteLote: async (itens: Array<{ sku: string; descricao?: string; quantidade: number }>) => {
+    const res = await http.post('/estoque/ajuste-lote', { itens });
+    return { data: { message: res.data.message } };
+  },
+  // PATCH /estoque/mover — transferir SKU para outra localização
+  mover: async (data: { sku: string; localizacaoOrigem?: string; localizacaoDestino: string; quantidade?: number }) => {
+    const res = await http.patch('/estoque/mover', data);
     return { data: { message: res.data.message } };
   },
 };

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Upload, AlertTriangle, CheckCircle, Loader, FileText, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { stockApi } from '../../../services/api';
 
 interface BatchRow {
   sku: string;
@@ -61,25 +62,25 @@ export default function BatchAdjustModal({ onClose, onDone }: Props) {
 
   const handleProcess = async () => {
     setStep('processing');
-    const updated = [...rows];
-    let success = 0;
-    let error = 0;
+    const updated = rows.map(r => ({ ...r, status: 'processing' as const }));
+    setRows(updated);
 
-    for (let i = 0; i < updated.length; i++) {
-      updated[i].status = 'processing';
-      setRows([...updated]);
-      await new Promise(r => setTimeout(r, 300 + Math.random() * 200));
-      // Simulate API call
-      const ok = Math.random() > 0.15;
-      updated[i].status = ok ? 'success' : 'error';
-      updated[i].error = ok ? undefined : 'SKU não encontrado ou saldo insuficiente';
-      ok ? success++ : error++;
-      setRows([...updated]);
+    // O backend processa o lote inteiro numa única transação
+    // (POST /estoque/ajuste-lote) — não há como aplicar linha a linha,
+    // então ou todo o lote é aplicado, ou nenhum (rollback automático).
+    try {
+      await stockApi.ajusteLote(
+        updated.map(r => ({ sku: r.sku, quantidade: r.quantity }))
+      );
+      setRows(updated.map(r => ({ ...r, status: 'success' as const })));
+      setStep('done');
+      toast.success(`${updated.length} ajuste(s) aplicados com sucesso`, { duration: 4000 });
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? 'Erro ao gravar o lote no servidor';
+      setRows(updated.map(r => ({ ...r, status: 'error' as const, error: msg })));
+      setStep('done');
+      toast.error(msg, { duration: 5000 });
     }
-
-    setStep('done');
-    toast.success(`${success} ajuste(s) aplicados`, { duration: 4000 });
-    if (error > 0) toast.error(`${error} item(s) com erro`, { duration: 4000 });
   };
 
   const downloadExample = () => {

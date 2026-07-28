@@ -15,6 +15,7 @@ import ABCCurve         from './components/ABCCurve';
 import StockAlerts      from './components/StockAlerts';
 import BatchAdjustModal from './components/BatchAdjustModal';
 import StockExportModal from './components/StockExportModal';
+import { stockApi } from '../../services/api';
 
 interface StockRow {
   sku_id: string;
@@ -48,38 +49,6 @@ const MOVEMENT_COLOR: Record<string, string> = {
   RELEASE: '#8b5cf6', ADJUSTMENT: '#38bdf8', LOSS: '#ef4444', TRANSFER: '#06b6d4',
 };
 
-function buildMockData(): StockRow[] {
-  const descs = ['Colchão Queen Molas Ensacadas','Colchão Casal Espuma D33','Cama Box Baú Queen','Colchão Solteiro D45','Cama Box King Size',
-    'Colchão Infantil D20','Base Box Solteiro','Travesseiro Viscoelástico','Protetor de Colchão Impermeável','Cabeceira Estofada Casal',
-    'Colchão King Molas Bonnel','Cama Box Baú Solteiro','Colchão Casal Ortopédico','Base Box Bipartida Queen','Colchão Queen Pillow Top'];
-  const cats = ['COLCHÕES','CAMA BOX','ACESSÓRIOS','CABECEIRAS'];
-  const zones = ['ESTOQUE A', 'ESTOQUE B', 'RECEBIMENTO', 'EXPEDIÇÃO'];
-  const statuses = ['NORMAL','NORMAL','NORMAL','NORMAL','ATENCAO','CRITICO','RUPTURA'];
-  return Array.from({ length: 32 }, (_, i) => {
-    const phys = Math.floor(Math.random() * 50) + 5;
-    const res  = Math.floor(Math.random() * Math.min(phys, 10));
-    const cost = parseFloat((Math.random() * 800 + 150).toFixed(2));
-    const nf = `NF-${Math.floor(100000 + Math.random() * 900000)}`;
-    const pedido = `PED-${Math.floor(1000 + Math.random() * 9000)}`;
-    return {
-      sku_id: `SKU-${String(i + 1).padStart(4, '0')}`,
-      description: descs[i % descs.length],
-      category: cats[i % cats.length],
-      quantity_physical: phys,
-      quantity_reserved: res,
-      quantity_available: phys - res,
-      average_cost: cost,
-      total_value: parseFloat((phys * cost).toFixed(2)),
-      status: statuses[Math.floor(Math.random() * statuses.length)],
-      location_code: `${String.fromCharCode(65 + (i % 6))}${Math.floor(i / 6) + 1}-${(i % 4) + 1}`,
-      zone: zones[i % zones.length],
-      last_movement_at: new Date(Date.now() - Math.random() * 14 * 24 * 60 * 60 * 1000).toISOString(),
-      order_number: pedido,
-      nf_number: nf,
-    };
-  });
-}
-
 export function InventoryMfe() {
   const [tab, setTab] = useState<'overview' | 'movements' | 'map' | 'abc' | 'alerts'>('overview');
   const [showMove, setShowMove]     = useState(false);
@@ -87,9 +56,21 @@ export function InventoryMfe() {
   const [showExport, setShowExport] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [stockData, setStockData]   = useState<StockRow[]>([]);
+  const [loadingStock, setLoadingStock] = useState(true);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setStockData(buildMockData()); }, [refreshKey]);
+  // Posição real de estoque, direto do banco (GET /estoque/saldos).
+  // Antes esta tela usava buildMockData() (32 itens aleatórios gerados no
+  // navegador) — nunca refletia o estoque de verdade.
+  useEffect(() => {
+    let cancelado = false;
+    setLoadingStock(true);
+    stockApi.saldos({ limit: 200 })
+      .then(res => { if (!cancelado) setStockData(res.data.dados as StockRow[]); })
+      .catch(() => { if (!cancelado) toast.error('Não foi possível carregar o estoque do servidor'); })
+      .finally(() => { if (!cancelado) setLoadingStock(false); });
+    return () => { cancelado = true; };
+  }, [refreshKey]);
 
   const refresh = () => setRefreshKey(k => k + 1);
 
@@ -219,8 +200,27 @@ export function InventoryMfe() {
           }))
           .filter(r => !r.sku_id.includes('...') && !r.description.includes('...') && r.sku_id !== 'SKU');
 
-        setStockData(mappedData);
-        toast.success(`Importados ${mappedData.length} registros com sucesso!`);
+        if (mappedData.length === 0) {
+          toast.error('Nenhum registro reconhecido na planilha.');
+          return;
+        }
+
+        // Grava de verdade no backend (POST /estoque/ajuste-lote), em vez de
+        // só guardar em memória — antes, um F5 na página perdia tudo que
+        // tinha sido "importado".
+        const tid = toast.loading('Gravando ajuste em lote no servidor...');
+        stockApi.ajusteLote(
+          mappedData.map(r => ({ sku: r.sku_id, descricao: r.description, quantidade: r.quantity_physical }))
+        )
+          .then(() => {
+            toast.dismiss(tid);
+            toast.success(`${mappedData.length} SKU(s) ajustado(s) no estoque com sucesso!`);
+            refresh();
+          })
+          .catch((err: any) => {
+            toast.dismiss(tid);
+            toast.error(err?.response?.data?.error ?? 'Erro ao gravar ajuste em lote no servidor');
+          });
       } catch (err) {
         console.error(err);
         toast.error('Erro ao importar o arquivo Excel.');
@@ -531,20 +531,11 @@ function MovementsPanel() {
   const [typeFilter, setTypeFilter] = useState('ALL');
 
   useEffect(() => {
-        const types = ['IN','OUT','RESERVE','RELEASE','ADJUSTMENT','LOSS','TRANSFER'];
-        const skus  = Array.from({ length: 10 }, (_, i) => `SKU-${String(i+1).padStart(4,'0')}`);
-        setData(Array.from({ length: 50 }, (_, i) => ({
-          id: `mv-${i}`,
-          movement_type: types[Math.floor(Math.random() * types.length)],
-          sku_id: skus[Math.floor(Math.random() * skus.length)],
-          quantity: Math.random() > 0.4 ? Math.floor(Math.random() * 200) + 1 : -(Math.floor(Math.random() * 100) + 1),
-          unit_cost: parseFloat((Math.random() * 50 + 5).toFixed(2)),
-          balance_after: Math.floor(Math.random() * 1000) + 100,
-          reference_type: ['COMPRA','VENDA','INVENTÁRIO','TRANSFERÊNCIA'][Math.floor(Math.random()*4)],
-          user_name: ['admin', 'operador1', 'gerente'][Math.floor(Math.random()*3)],
-          occurred_at: new Date(Date.now() - Math.random() * 7*24*60*60*1000).toISOString(),
-        })));
-        setLoading(false);
+    setLoading(true);
+    stockApi.movimentacoes({ limit: 100 })
+      .then(res => setData(res.data.dados))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false));
   }, []);
 
   const types = ['ALL', ...Array.from(new Set(data.map(m => m.movement_type)))];
@@ -575,7 +566,7 @@ function MovementsPanel() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #242424', background: '#161616' }}>
-                {['Tipo','SKU','Qtd','Custo Unit.','Saldo Após','Referência','Usuário','Data/Hora'].map(h => (
+                {['Tipo','SKU','Qtd','Motivo/Referência','Data/Hora'].map(h => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: '#8b9dc3', fontWeight: 600, fontSize: '11px', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
                 ))}
               </tr>
@@ -590,15 +581,12 @@ function MovementsPanel() {
                   <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontWeight: 600 }}>
                     <span style={{ color: m.quantity > 0 ? '#22c55e' : '#ef4444' }}>{m.quantity > 0 ? '+' : ''}{m.quantity}</span>
                   </td>
-                  <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#8b9dc3', fontSize: '12px' }}>{m.unit_cost ? `R$ ${parseFloat(m.unit_cost).toFixed(2)}` : '—'}</td>
-                  <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: '#8b9dc3' }}>{m.balance_after ?? '—'}</td>
                   <td style={{ padding: '10px 14px', color: '#8b9dc3', fontSize: '12px' }}>{m.reference_type ?? '—'}</td>
-                  <td style={{ padding: '10px 14px', color: '#8b9dc3' }}>{m.user_name ?? '—'}</td>
                   <td style={{ padding: '10px 14px', color: '#8b9dc3', fontSize: '12px', whiteSpace: 'nowrap' }}>{m.occurred_at ? new Date(m.occurred_at).toLocaleString('pt-BR') : '—'}</td>
                 </tr>
               ))}
               {!filtered.length && (
-                <tr><td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: '#8b9dc3' }}>Nenhuma movimentação encontrada</td></tr>
+                <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#8b9dc3' }}>Nenhuma movimentação encontrada</td></tr>
               )}
             </tbody>
           </table>

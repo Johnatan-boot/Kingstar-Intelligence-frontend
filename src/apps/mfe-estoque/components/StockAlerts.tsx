@@ -1,34 +1,32 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, TrendingDown, Clock, CheckCircle, XCircle, ChevronRight } from 'lucide-react';
+import { AlertTriangle, Clock, CheckCircle, XCircle, ChevronRight } from 'lucide-react';
+import { stockApi } from '../../../services/api';
 
 interface StockAlert {
   id: string;
-  type: 'CRITICO' | 'RUPTURA' | 'VENCIMENTO' | 'GIRO_BAIXO';
+  type: 'CRITICO' | 'RUPTURA' | 'ATENCAO';
   sku: string;
   description: string;
   message: string;
   severity: 'high' | 'medium' | 'low';
   value?: number;
-  since?: string;
   dismissed?: boolean;
 }
 
+// Só existem estes 3 status no backend (coluna `estoque.status`), calculados
+// automaticamente a cada movimentação. Não há dado de vencimento de lote ou
+// de giro/obsolescência no banco hoje, então os tipos VENCIMENTO/GIRO_BAIXO
+// que existiam aqui (mockados) foram removidos — mostrar isso exigiria um
+// campo de validade e um cálculo de giro que o schema ainda não tem.
 const ALERT_CONFIG = {
   CRITICO: { icon: AlertTriangle, color: '#ef4444', bg: '#ef444418', label: 'Estoque Crítico' },
   RUPTURA: { icon: XCircle, color: '#dc2626', bg: '#dc262618', label: 'Ruptura' },
-  VENCIMENTO: { icon: Clock, color: '#facc15', bg: '#facc1518', label: 'Próx. Vencimento' },
-  GIRO_BAIXO: { icon: TrendingDown, color: '#8b9dc3', bg: '#71717a18', label: 'Baixo Giro' },
+  ATENCAO: { icon: Clock, color: '#facc15', bg: '#facc1518', label: 'Atenção' },
 };
 
-function generateMockAlerts(): StockAlert[] {
-  return [
-    { id: '1', type: 'RUPTURA', sku: 'SKU-0003', description: 'Arruela Lisa', message: 'Estoque zerado — sem disponibilidade para pedidos', severity: 'high', value: 0, since: '2h atrás' },
-    { id: '2', type: 'CRITICO', sku: 'SKU-0007', description: 'Tubo Galv 1"', message: 'Abaixo do mínimo: 12 un. (mín. 50 un.)', severity: 'high', value: 12, since: '1 dia atrás' },
-    { id: '3', type: 'CRITICO', sku: 'SKU-0012', description: 'Flange Inox', message: 'Abaixo do mínimo: 5 un. (mín. 30 un.)', severity: 'high', value: 5, since: '3h atrás' },
-    { id: '4', type: 'VENCIMENTO', sku: 'SKU-0018', description: 'Vedante Borracha', message: 'Lote #L-2240 vence em 12 dias', severity: 'medium', since: '1 dia atrás' },
-    { id: '5', type: 'GIRO_BAIXO', sku: 'SKU-0015', description: 'Chave Allen M6', message: 'Sem movimentação há 45 dias — possível obsolescência', severity: 'low', since: '45 dias' },
-    { id: '6', type: 'GIRO_BAIXO', sku: 'SKU-0019', description: 'Pino Guia 8mm', message: 'Sem movimentação há 38 dias', severity: 'low', since: '38 dias' },
-  ];
+function mapSeveridade(status: string): 'high' | 'medium' | 'low' {
+  if (status === 'RUPTURA' || status === 'CRITICO') return 'high';
+  return 'medium';
 }
 
 export default function StockAlerts() {
@@ -36,7 +34,20 @@ export default function StockAlerts() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    setAlerts(generateMockAlerts());
+    stockApi.alertas().then(res => {
+      const dados = res.data.dados as Array<{ sku_id: string; description: string; status: string; quantity: number }>;
+      setAlerts(dados.map(d => ({
+        id: d.sku_id,
+        type: (d.status as StockAlert['type']) ?? 'ATENCAO',
+        sku: d.sku_id,
+        description: d.description,
+        message: d.status === 'RUPTURA'
+          ? 'Estoque zerado — sem disponibilidade para pedidos'
+          : `Quantidade atual: ${d.quantity} un.`,
+        severity: mapSeveridade(d.status),
+        value: d.quantity,
+      })));
+    }).catch(() => setAlerts([]));
   }, []);
 
   const visible = alerts.filter(a => !dismissed.has(a.id));
@@ -140,9 +151,6 @@ export default function StockAlerts() {
                   <span style={{ fontSize: '12px', color: '#e5e5e5' }}>{alert.description}</span>
                 </div>
                 <p style={{ fontSize: '13px', color: '#fff', marginBottom: '4px' }}>{alert.message}</p>
-                {alert.since && (
-                  <span style={{ fontSize: '11px', color: '#8b9dc3' }}>Desde: {alert.since}</span>
-                )}
               </div>
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                 <button

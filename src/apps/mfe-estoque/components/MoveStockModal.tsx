@@ -12,7 +12,7 @@ const TYPES = [
 ];
 
 export default function MoveStockModal({ onClose }: Props) {
-  const [form, setForm] = useState({ type: 'IN', skuId: '', locationId: 'RECEBIMENTO-GERAL', quantity: '', unitCost: '', reason: '' });
+  const [form, setForm] = useState({ type: 'IN', skuId: '', quantity: '', reason: '' });
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState('');
@@ -25,12 +25,10 @@ export default function MoveStockModal({ onClose }: Props) {
       const result: any = await stockApi.move({
         type:       form.type,
         skuId:      form.skuId,
-        locationId: form.locationId,
         quantity:   parseFloat(form.quantity),
-        unitCost:   form.unitCost ? parseFloat(form.unitCost) : undefined,
         reason:     form.reason || undefined,
       });
-      setSuccess(`Movimentação registrada: ${result?.movementId || 'Sucesso'}`);
+      setSuccess(`Movimentação registrada com sucesso`);
       setTimeout(onClose, 1500);
     } catch (err: any) {
       setError(err?.response?.data?.error ?? 'Erro ao movimentar estoque');
@@ -83,19 +81,9 @@ export default function MoveStockModal({ onClose }: Props) {
               <input value={form.skuId} onChange={e => setForm(f => ({...f, skuId: e.target.value}))} placeholder="SKU-0001" style={{ width: '100%', background: '#121212', border: '1px solid #333', borderRadius: '8px', color: '#fff', fontSize: '13px', padding: '9px 12px', boxSizing: 'border-box', outline: 'none' }} />
             </div>
             <div>
-              <label style={{ fontSize: '12px', color: '#8b9dc3', fontWeight: 600, display: 'block', marginBottom: '6px' }}>Localização *</label>
-              <input value={form.locationId} onChange={e => setForm(f => ({...f, locationId: e.target.value}))} placeholder="RECEBIMENTO-GERAL" style={{ width: '100%', background: '#121212', border: '1px solid #333', borderRadius: '8px', color: '#fff', fontSize: '13px', padding: '9px 12px', boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-            <div>
               <label style={{ fontSize: '12px', color: '#8b9dc3', fontWeight: 600, display: 'block', marginBottom: '6px' }}>Quantidade *</label>
               <input type="number" value={form.quantity} onChange={e => setForm(f => ({...f, quantity: e.target.value}))} min="1" style={{ width: '100%', background: '#121212', border: '1px solid #333', borderRadius: '8px', color: '#fff', fontSize: '13px', padding: '9px 12px', boxSizing: 'border-box', outline: 'none' }} />
             </div>
-            {form.type === 'IN' && (
-              <div>
-                <label style={{ fontSize: '12px', color: '#8b9dc3', fontWeight: 600, display: 'block', marginBottom: '6px' }}>Custo Unitário</label>
-                <input type="number" value={form.unitCost} onChange={e => setForm(f => ({...f, unitCost: e.target.value}))} placeholder="0.00" step="0.01" style={{ width: '100%', background: '#121212', border: '1px solid #333', borderRadius: '8px', color: '#fff', fontSize: '13px', padding: '9px 12px', boxSizing: 'border-box', outline: 'none' }} />
-              </div>
-            )}
           </div>
 
           {(form.type === 'ADJUSTMENT' || form.type === 'LOSS') && (
