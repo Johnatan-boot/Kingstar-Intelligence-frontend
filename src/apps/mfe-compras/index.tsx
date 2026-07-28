@@ -304,6 +304,7 @@ export function PurchasingMfe() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [excelRows, setExcelRows] = useState<any[] | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
 
   const [form, setForm] = useState({
@@ -410,13 +411,14 @@ export function PurchasingMfe() {
     if (!file) return;
     e.target.value = "";
     if (!file.name.match(/\.(xlsx|xls|csv)$/i)) return toast.error("Formato inválido. Use .xlsx, .xls ou .csv");
-    
+
     const tid = toast.loading("Lendo arquivo, aguarde...");
     try {
       await new Promise(resolve => setTimeout(resolve, 50)); // let UI render toast
       const rows = await lerExcel(file);
       toast.dismiss(tid);
       if (rows.length === 0) return toast.error("Planilha vazia ou sem dados reconhecidos");
+      setSelectedFile(file);
       setExcelRows(rows);
     } catch {
       toast.dismiss(tid);
@@ -424,73 +426,32 @@ export function PurchasingMfe() {
     }
   };
 
+  // Este preview (lerExcel) roda no navegador só para o usuário conferir as
+  // linhas antes de confirmar. A importação de fato é feita enviando o
+  // arquivo original para o backend (POST /compras/importar), que faz o
+  // parse novamente no servidor com a validação oficial (planilhaLinhaSchema)
+  // e captura campos essenciais para o recebimento (placa/tipo de veículo)
+  // que este preview não usa. Isso evita divergência entre o que valida no
+  // preview e o que efetivamente é gravado no banco.
   const handleImportConfirm = async () => {
-    if (!excelRows) return;
+    if (!excelRows || !selectedFile) return;
     const validos = excelRows.filter((r) => r._valido);
     if (validos.length === 0) return toast.error("Nenhuma linha válida para importar");
 
     setImporting(true);
-    let sucesso = 0;
-    let falha = 0;
-    const errorsSet = new Set<string>();
-
-    const grupos: Record<string, any[]> = {};
-    validos.forEach((row) => {
-      const chave = row.numero_nf || `linha_${row._linha}`;
-      if (!grupos[chave]) grupos[chave] = [];
-      grupos[chave].push(row);
-    });
-
-    const entries = Object.entries(grupos);
-    const promises = entries.map(async ([nf, itens]) => {
-      try {
-        const primeiroItem = itens[0];
-        let dateISO: string | undefined = undefined;
-        if (primeiroItem.previsao_entrega) {
-          try {
-            const d = new Date(primeiroItem.previsao_entrega);
-            if (!isNaN(d.getTime())) {
-              dateISO = d.toISOString();
-            }
-          } catch(e) {}
-        }
-
-        await purchasesApi.create({
-          supplierId: primeiroItem.fornecedor,
-          supplierName: primeiroItem.fornecedor,
-          nfNumber: primeiroItem.numero_nf || undefined,
-          nfValue: primeiroItem.valor_nf ? Number(primeiroItem.valor_nf) : undefined,
-          expectedAt: dateISO,
-          items: itens.map((item) => ({
-            skuId: item.sku || item.descricao,
-            description: item.descricao,
-            unit: "UN",
-            expectedQuantity: Number(item.quantidade) || 1,
-            unitCost: Number(item.custo_unitario) || 0,
-          })),
-        });
-        return { success: true };
-      } catch (err: any) {
-        return { success: false, error: err?.response?.data?.message ?? err?.message ?? String(err) };
-      }
-    });
-
-    const results = await Promise.all(promises);
-    results.forEach(res => {
-      if (res.success) sucesso++;
-      else {
-        falha++;
-        errorsSet.add(res.error!);
-      }
-    });
-
-    setImporting(false);
-    setExcelRows(null);
-    if (sucesso > 0) toast.success(`${sucesso} pedido(s) importado(s) com sucesso!`);
-    if (falha > 0) {
-      toast.error(`${falha} pedido(s) falharam na importação. Motivos: ${Array.from(errorsSet).join(', ')}`, { duration: 8000 });
+    try {
+      const resultado = await purchasesApi.importar(selectedFile);
+      const pedidosCriados = resultado?.data?.pedidosCriados ?? 0;
+      toast.success(`${pedidosCriados} pedido(s) importado(s) com sucesso!`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? err?.response?.data?.message ?? "Erro ao importar planilha";
+      toast.error(msg, { duration: 8000 });
+    } finally {
+      setImporting(false);
+      setExcelRows(null);
+      setSelectedFile(null);
+      load();
     }
-    load();
   };
 
   return (
@@ -880,7 +841,7 @@ export function PurchasingMfe() {
         <ExcelPreviewModal
           rows={excelRows}
           onConfirm={handleImportConfirm}
-          onClose={() => setExcelRows(null)}
+          onClose={() => { setExcelRows(null); setSelectedFile(null); }}
           importing={importing}
         />
       )}

@@ -2,7 +2,12 @@ import React, { useState } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 
-type Role = 'ADMIN' | 'STOCK' | 'PURCHASING' | 'CONFERENCE' | 'RECEIVING';
+// Autocadastro público só pode criar contas operacionais — contas com
+// acesso total (Admin/Gestor/Compras/PCL/Analítica) são criadas por um
+// admin já autenticado, no painel Admin (módulo /usuarios). Os valores
+// abaixo já correspondem 1:1 ao enum `funcao` aceito por /auth/register
+// no backend (RECEBIMENTO | CONFERENCIA | ESTOQUE).
+type Role = 'ESTOQUE' | 'CONFERENCIA' | 'RECEBIMENTO';
 
 export default function AuthPage() {
   const { login, register } = useAuth();
@@ -11,7 +16,7 @@ export default function AuthPage() {
   const [password,   setPassword]   = useState('');
   const [name,       setName]       = useState('');
   const [department, setDepartment] = useState('Recebimento');
-  const [role,       setRole]       = useState<Role>('RECEIVING');
+  const [role,       setRole]       = useState<Role>('RECEBIMENTO');
   const [isRegister, setIsRegister] = useState(false);
   const [loading,    setLoading]    = useState(false);
 
@@ -142,12 +147,9 @@ export default function AuthPage() {
                 onChange={e => setDepartment(e.target.value)}
                 className="w-full mt-1 p-2.5 rounded-md bg-zinc-800 border border-zinc-700 text-white outline-none focus:ring-2 focus:ring-kingstar-cyan text-sm"
               >
-                <option>Compras</option>
                 <option>Recebimento</option>
                 <option>Conferência</option>
                 <option>Estoque</option>
-                <option>Diretoria</option>
-                <option>PCL</option>
               </select>
             </div>
             <div className="w-full text-left">
@@ -157,12 +159,14 @@ export default function AuthPage() {
                 onChange={e => setRole(e.target.value as Role)}
                 className="w-full mt-1 p-2.5 rounded-md bg-zinc-800 border border-zinc-700 text-white outline-none focus:ring-2 focus:ring-kingstar-cyan text-sm"
               >
-                <option value="RECEIVING">Operador (Recebimento)</option>
-                <option value="CONFERENCE">Conferente</option>
-                <option value="STOCK">Estoque</option>
-                <option value="PURCHASING">Compras</option>
-                <option value="ADMIN">Gestor / Admin</option>
+                <option value="RECEBIMENTO">Operador (Recebimento)</option>
+                <option value="CONFERENCIA">Conferente</option>
+                <option value="ESTOQUE">Estoque</option>
               </select>
+              <p className="text-zinc-500 text-[11px] mt-1">
+                Perfis de gestão (Admin, Compras, PCL, Analítica) só podem ser criados
+                por um administrador já autenticado, no painel Admin.
+              </p>
             </div>
           </>
         )}
